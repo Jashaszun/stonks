@@ -1,0 +1,27 @@
+html, body {
+    height: 100vh;
+}
+.fill-height {
+    min-height: 100vh;
+    height:auto !important; /* cross-browser */
+    height: 100vh; /* cross-browser */
+}
+
+.trade-table-tr:hover {
+    cursor: pointer;
+}
+.trade-table-buy-tr {
+    background-color: rgba(0, 255, 0, 0.2);
+}
+.trade-table-sell-tr {
+    background-color: rgba(255, 0, 0, 0.2);
+}
+.trade-table-profit-tr {
+    background-color: rgba(0, 255, 0, 0.2);
+}
+.trade-table-loss-tr {
+    background-color: rgba(255, 0, 0, 0.2);
+}
+.cancel-trade-edit-btn-not-displayed {
+    display: none;
+}
