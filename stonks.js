@@ -66,13 +66,6 @@ window.onload = function(e) {
     });
 
     if (storageAvailable('localStorage')) {
-        if (window.localStorage.getItem("trades")) {
-            trades = JSON.parse(window.localStorage.getItem("trades"));
-            for (var i in trades) {
-                addTrade(trades[i], true);
-            }
-            updateStats();
-        }
         if (window.localStorage.getItem("stockPrices")) {
             stockPrices = JSON.parse(window.localStorage.getItem("stockPrices"), function (key, value) {
                 // startDate and endDate are in top level for each ticker
@@ -84,11 +77,16 @@ window.onload = function(e) {
                 return value;
             });
         }
+        if (window.localStorage.getItem("trades")) {
+            trades = JSON.parse(window.localStorage.getItem("trades"));
+            for (var i in trades) {
+                addTrade(trades[i], true);
+            }
+            updateStats();
+        }
     } else {
         alert("Warning: localStorage not available on this browser.");
     }
-
-    updateGraphs();
 };
 
 function updateGraphs() {
