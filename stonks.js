@@ -471,6 +471,9 @@ function updateStockGraphs(tickerDateRanges) {
 var graphsAreOHLC = true;
 function chartTypeSelectionClicked() {
     graphsAreOHLC = $('#ohlcButton').is(':checked');
+    $("#stocksAccordion .accordion-body input").each(function() {
+        $(this).attr('type', graphsAreOHLC ? 'radio' : 'checkbox');
+    });
     // update all the graphs
     $('#stocksAccordion .accordion-item').each(function() {
         var graphContent = $(this).children('.accordion-collapse').first().attr('id');
@@ -481,41 +484,44 @@ function chartTypeSelectionClicked() {
 function chartElementSelectionClicked(graph) {
     var chart = charts[graph];
     var chartType;
-    var dataset;
-    var label;
-    var tooltipUnit = '$';
+    var datasets = [];
+    var labels = [];
     if (graph === 'all') {
         chartType = graphsAreOHLC ? 'ohlc' : 'line';
         if ($('#holdingsButton-all').is(':checked')) {
-            dataset = graphData['all'].holdings;
-            label = "Total Holdings";
-        } else if ($('#plButton-all').is(':checked')) {
-            dataset = graphData['all'].totalPL;
-            label = "Total Profit/Loss"
-        } else if ($('#plPercentButton-all').is(':checked')) {
-            dataset = graphData['all'].totalPLPercent;
-            label = "Total Profit/Loss (%)"
-            tooltipUnit = '%';
+            datasets.push(graphData['all'].holdings);
+            labels.push("Total Holdings");
+        }
+        if ($('#plButton-all').is(':checked')) {
+            datasets.push(graphData['all'].totalPL);
+            labels.push("Total Profit/Loss");
+        }
+        if ($('#plPercentButton-all').is(':checked')) {
+            datasets.push(graphData['all'].totalPLPercent);
+            labels.push("Total Profit/Loss (%)");
         }
     } else {
         chartType = graphsAreOHLC ? 'ohlc' : 'line';
         if ($('#sharePriceButton-' + graph).is(':checked')) {
-            dataset = graphData[graph].sharePrice;
-            label = graph + ' Share Price';
-        } else if ($('#holdingsButton-' + graph).is(':checked')) {
-            dataset = graphData[graph].holdings;
-            label = graph + ' Holdings';
-        } else if ($('#breakevenButton-' + graph).is(':checked')) {
+            datasets.push(graphData[graph].sharePrice);
+            labels.push(graph + ' Share Price');
+        }
+        if ($('#holdingsButton-' + graph).is(':checked')) {
+            datasets.push(graphData[graph].holdings);
+            labels.push(graph + ' Holdings');
+        }
+        if ($('#breakevenButton-' + graph).is(':checked')) {
             chartType = 'line';
-            dataset = graphData[graph].breakevenPerShare;
-            label = graph + ' Breakeven per Share';
-        } else if ($('#plButton-' + graph).is(':checked')) {
-            dataset = graphData[graph].pl;
-            label = graph + ' Profit/Loss';
-        } else if ($('#plPercentButton-' + graph).is(':checked')) {
-            dataset = graphData[graph].plPercent;
-            label = graph + ' Profit/Loss (%)';
-            tooltipUnit = '%';
+            datasets.push(graphData[graph].breakevenPerShare);
+            labels.push(graph + ' Breakeven per Share');
+        }
+        if ($('#plButton-' + graph).is(':checked')) {
+            datasets.push(graphData[graph].pl);
+            labels.push(graph + ' Profit/Loss');
+        }
+        if ($('#plPercentButton-' + graph).is(':checked')) {
+            datasets.push(graphData[graph].plPercent);
+            labels.push(graph + ' Profit/Loss (%)');
         }
     }
 
@@ -523,92 +529,79 @@ function chartElementSelectionClicked(graph) {
         var ctx = chart.ctx;
         chart.destroy();
         if (chartType === 'line') {
-            if (dataset[0].o) {
-                // it's OHLC data, so we need to convert
-                var newDataset = [];
-                for (var i in dataset) {
-                    newDataset.push({ x: dataset[i].t, y: dataset[i].c });
+            for (var i in datasets) {
+                var dataset = datasets[i];
+                if (dataset[0].o) {
+                    // it's OHLC data, so we need to convert
+                    var newDataset = [];
+                    for (var j in dataset) {
+                        newDataset.push({ x: dataset[j].t, y: dataset[j].c });
+                    }
+                    datasets[i] = newDataset;
                 }
-                dataset = newDataset;
             }
-            var tooltipCallback = tooltipUnit === '$' ? {
-                label(ctx) {
-                    return getPriceText(ctx.dataPoint.y);
-                }
-            } : {
-                label(ctx) {
-                    return ctx.dataPoint.y.toFixed(2) + ' %';
-                }
-            };
+            var datasetsForChart = [];
+            for (var i in datasets) {
+                datasetsForChart.push({ label: labels[i], data: datasets[i] });
+            }
             charts[graph] = chart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    datasets: [{
-                        label: label,
-                        data: dataset,
-                    }]
+                    datasets: datasetsForChart
                 },
                 options: {
                     scales: Chart.defaults.financial.scales,
                     colorschemes: {
-                        scheme: 'office.Celestial6'//'tableau.ClassicMedium10'
+                        scheme: 'brewer.SetOne9'//'office.Celestial6'//'tableau.ClassicMedium10'
                     },
                     plugins: {
                         tooltip: {
                             intersect: false,
                             mode: 'index',
-                            callbacks: tooltipCallback
+                            callbacks: {
+                                label(ctx) {
+                                    if (ctx.dataset.label.indexOf('%') === -1) {
+                                        return ctx.dataset.label + ': ' + getPriceText(ctx.dataPoint.y);
+                                    } else {
+                                        return ctx.dataset.label + ': ' + ctx.dataPoint.y.toFixed(2) + ' %';
+                                    }
+                                }
+                            }
                         }
                     }
                 },
             });
         } else {
             // ohlc
-            var config = {
+            charts[graph] = chart = new Chart(ctx, {
                 type: 'ohlc',
                 data: {
                     datasets: [{
-                        label: label,
-                        data: dataset
+                        label: labels[0],
+                        data: datasets[0]
                     }]
                 }
-            };
-            if (tooltipUnit === '%') {
-                config.options = {
-                    plugins: {
-                        tooltip: {
-                            callbacks: {
-                                label(ctx) {
-                                    const point = ctx.dataPoint;
-                
-                                    function isNullOrUndef(value) {
-                                        return value === null || typeof value === 'undefined';
-                                    }
-                                    if (!isNullOrUndef(point.y)) {
-                                        return Chart.Chart.defaults.interaction.callbacks.label(ctx);
-                                    }
-                
-                                    const {o, h, l, c} = point;
-                                    return `O: ${o.toFixed(2)+' %'}   H: ${h.toFixed(2)+' %'}   L: ${l.toFixed(2)+' %'}   C: ${c.toFixed(2)+' %'}`;
-                                }
-                            }
-                        }
-                    }
-                };
-            }
-            charts[graph] = chart = new Chart(ctx, config);
+            });
         }
     } else {
-        if (dataset[0].o && chartType === 'line') {
-            // it's OHLC data, so we need to convert
-            var newDataset = [];
-            for (var i in dataset) {
-                newDataset.push({ x: dataset[i].t, y: dataset[i].c });
+        if (chartType === 'line') {
+            for (var i in datasets) {
+                var dataset = datasets[i];
+                if (dataset[0].o) {
+                    // it's OHLC data, so we need to convert
+                    var newDataset = [];
+                    for (var j in dataset) {
+                        newDataset.push({ x: dataset[j].t, y: dataset[j].c });
+                    }
+                    datasets[i] = newDataset;
+                }
             }
-            dataset = newDataset;
         }
-        chart.data.datasets[0].data = dataset;
-        chart.data.datasets[0].label = label;
+        var datasetsForChart = [];
+        for (var i in datasets) {
+            datasetsForChart.push({ label: labels[i], data: datasets[i] });
+        }
+        chart.data.datasets = datasetsForChart;
         chart.update();
     }
 }

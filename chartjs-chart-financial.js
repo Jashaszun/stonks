@@ -221,7 +221,11 @@ Chart.defaults.financial = {
 						}
 						return text;
 					}
-					return `O: ${getPriceText(o)}   H: ${getPriceText(h)}   L: ${getPriceText(l)}   C: ${getPriceText(c)}`;
+					if (ctx.dataset.label.indexOf('%') === -1) {
+						return `${ctx.dataset.label}: O: ${getPriceText(o)}   H: ${getPriceText(h)}   L: ${getPriceText(l)}   C: ${getPriceText(c)}`;
+					} else {
+						return `${ctx.dataset.label}: O: ${o.toFixed(2)+' %'}   H: ${h.toFixed(2)+' %'}   L: ${l.toFixed(2)+' %'}   C: ${c.toFixed(2)+' %'}`;
+					}
 				}
 			}
 		}
