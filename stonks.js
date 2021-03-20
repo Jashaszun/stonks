@@ -67,7 +67,7 @@ window.onload = function(e) {
 
     if (storageAvailable('localStorage')) {
         if (window.localStorage.getItem("stockPrices")) {
-            stockPrices = JSON.parse(window.localStorage.getItem("stockPrices"), function (key, value) {
+            stockPrices = JSON.parse(window.localStorage.getItem("stockPrices")/*, function (key, value) {
                 // startDate and endDate are in top level for each ticker
                 // date is in each price object within the prices of each ticker
                 // They're strings, but we want Date objects
@@ -75,7 +75,7 @@ window.onload = function(e) {
                     return new Date(value);
                 }
                 return value;
-            });
+            }*/);
         }
         if (window.localStorage.getItem("trades")) {
             trades = JSON.parse(window.localStorage.getItem("trades"));
@@ -92,36 +92,34 @@ window.onload = function(e) {
 function updateGraphs() {
     if (trades.length > 0) {
         var numShares = {};
-        var stockMinDates = {};
-        var stockMaxDates = {};
+        var tickerDateRanges = {};
         for (var i in trades) {
             var trade = trades[i];
             var tradeDate = new Date(trade.date);
             if (!(trade.ticker in numShares)) {
                 numShares[trade.ticker] = 0;
-                stockMinDates[trade.ticker] = tradeDate;
-                stockMaxDates[trade.ticker] = tradeDate;
+                tickerDateRanges[trade.ticker] = { startDate: tradeDate, endDate: tradeDate };
             }
             numShares[trade.ticker] += trade.buying ? trade.qty : (-trade.qty);
 
-            if (tradeDate < stockMinDates[trade.ticker]) {
-                stockMinDates[trade.ticker] = tradeDate;
+            if (tradeDate < tickerDateRanges[trade.ticker].startDate) {
+                tickerDateRanges[trade.ticker].startDate = tradeDate;
             }
-            if (tradeDate > stockMaxDates[trade.ticker]) {
-                stockMaxDates[trade.ticker] = tradeDate;
+            if (tradeDate > tickerDateRanges[trade.ticker].endDate) {
+                tickerDateRanges[trade.ticker].endDate = tradeDate;
             }
         }
         var tickers = Object.keys(numShares);
         tickers.sort();
         for (var i in tickers) {
             if (numShares[tickers[i]] > 0) {
-                stockMaxDates[tickers[i]] = getTodayDate();
+                tickerDateRanges[tickers[i]].endDate = getTodayDate();
             }
-            if (minTradeDate === undefined || stockMinDates[tickers[i]] < minTradeDate) {
-                minTradeDate = stockMinDates[tickers[i]];
+            if (minTradeDate === undefined || tickerDateRanges[tickers[i]].startDate < minTradeDate) {
+                minTradeDate = tickerDateRanges[tickers[i]].startDate;
             }
-            if (maxTradeDate === undefined || stockMaxDates[tickers[i]] > maxTradeDate) {
-                maxTradeDate = stockMaxDates[tickers[i]];
+            if (maxTradeDate === undefined || tickerDateRanges[tickers[i]].endDate > maxTradeDate) {
+                maxTradeDate = tickerDateRanges[tickers[i]].endDate;
             }
         }
 
@@ -129,16 +127,16 @@ function updateGraphs() {
         for (var i in tickers) {
             var request = {
                 ticker: tickers[i],
-                startDate: stockMinDates[tickers[i]],
-                endDate: stockMaxDates[tickers[i]]
+                startDate: tickerDateRanges[tickers[i]].startDate,
+                endDate: tickerDateRanges[tickers[i]].endDate
             };
 
             // If we already have the data, no need to request it
             var needRequest = true;
             if (tickers[i] in stockPrices) {
                 var storedData = stockPrices[tickers[i]];
-                var storedStartDate = storedData.startDate;
-                var storedEndDate = storedData.endDate;
+                var storedStartDate = new Date(storedData.startDate);
+                var storedEndDate = new Date(storedData.endDate);
                 if (request.startDate >= storedStartDate && request.endDate <= storedEndDate) {
                     needRequest = false;
                 }
@@ -150,27 +148,29 @@ function updateGraphs() {
         function getStockPrices(priceRequests) {
             if (priceRequests.length > 0) {
                 var request = priceRequests[0];
-                var startDateStr = request.startDate.getFullYear().toString() + '-' + 
-                    (request.startDate.getMonth()+1).toString().padStart(2, '0') + '-' + 
-                    request.startDate.getDate().toString().padStart(2, '0');
-                var endDateStr = request.endDate.getFullYear().toString() + '-' + 
-                    (request.endDate.getMonth()+1).toString().padStart(2, '0') + '-' + 
-                    request.endDate.getDate().toString().padStart(2, '0');
-                $.getJSON("https://api.polygon.io/v2/aggs/ticker/" + request.ticker + "/range/1/day/" + startDateStr + "/" + endDateStr +
-                    "?unadjusted=false&sort=asc&limit=50000&apiKey=UnHyngIUP8cW5jGX17pCpjWipUPDzPr9", function(data) {
+                // var startDateStr = request.startDate.getFullYear().toString() + '-' + 
+                //     (request.startDate.getMonth()+1).toString().padStart(2, '0') + '-' + 
+                //     request.startDate.getDate().toString().padStart(2, '0');
+                // var endDateStr = request.endDate.getFullYear().toString() + '-' + 
+                //     (request.endDate.getMonth()+1).toString().padStart(2, '0') + '-' + 
+                //     request.endDate.getDate().toString().padStart(2, '0');
+                // $.getJSON("https://api.polygon.io/v2/aggs/ticker/" + request.ticker + "/range/1/day/" + startDateStr + "/" + endDateStr +
+                //     "?unadjusted=false&sort=asc&limit=50000&apiKey=UnHyngIUP8cW5jGX17pCpjWipUPDzPr9", function(data) {
+                $.getJSON("http://73.254.230.39:8123/ticker/" + request.ticker, function(data) {
                     console.log("Got historical data for " + request.ticker);
-                    for (var i in data.results) {
-                        // The times are given at 9pm the night before (???), so add 19 hours to get to 4pm of the correct day.
-                        data.results[i].t += 19 * 60 * 60 * 1000;
-                        data.results[i].date = new Date(data.results[i].t);
-                        data.results[i].date = new Date(data.results[i].date.getFullYear(), data.results[i].date.getMonth(), data.results[i].date.getDate());
-                    }
-                    var storedPrices = {
-                        startDate: request.startDate,
-                        endDate: request.endDate,
-                        prices: data.results
-                    };
-                    stockPrices[request.ticker] = storedPrices;
+                    // for (var i in data.results) {
+                    //     // The times are given at 9pm the night before (???), so add 19 hours to get to 4pm of the correct day.
+                    //     data.results[i].t += 19 * 60 * 60 * 1000;
+                    //     data.results[i].date = new Date(data.results[i].t);
+                    //     data.results[i].date = new Date(data.results[i].date.getFullYear(), data.results[i].date.getMonth(), data.results[i].date.getDate());
+                    // }
+                    // var storedPrices = {
+                    //     startDate: request.startDate,
+                    //     endDate: request.endDate,
+                    //     prices: data.results
+                    // };
+                    // stockPrices[request.ticker] = storedPrices;
+                    stockPrices[request.ticker] = data.data;
                     window.localStorage.setItem("stockPrices", JSON.stringify(stockPrices));
                     
                     // Start on the rest of the requests
@@ -182,7 +182,7 @@ function updateGraphs() {
                 });
             } else {
                 // We got all the data we need!
-                updateStockGraphs();
+                updateStockGraphs(tickerDateRanges);
             }
         };
         if (priceRequests.length > 0) {
@@ -190,13 +190,13 @@ function updateGraphs() {
             getStockPrices(priceRequests);
         } else {
             // We already have all the historical data we need to create graphs
-            updateStockGraphs();
+            updateStockGraphs(tickerDateRanges);
         }
     } else {
-        updateStockGraphs(); // This will end up removing the accordion folds
+        updateStockGraphs(tickerDateRanges); // This will end up removing the accordion folds
     }
 }
-function getGraphData() {
+function getGraphData(tickerDateRanges) {
     var tickers = Object.keys(stockPrices);
     tickers.sort();
 
@@ -234,28 +234,36 @@ function getGraphData() {
             var ticker = tickers[i];
             if (data[ticker].sharePriceIndex === undefined) {
                 // We haven't reached the start of this ticker yet
-                if (stockPrices[ticker].startDate <= date) {
+                if (date >= tickerDateRanges[ticker].startDate && new Date(stockPrices[ticker].startDate) <= date) {
                     // We have data for the current date
-                    for (var j = 0; j < stockPrices[ticker].prices.length; j++) {
-                        if (stockPrices[ticker].prices[j].date <= date) {
-                            data[ticker].sharePriceIndex = j;
-                            data[ticker].sharePrice[0] = stockPrices[ticker].prices[j];
-                            data[ticker].dates[0] = date;
+                    // Get the latest quote before or on the current date
+                    var latestQuote;
+                    var j;
+                    for (j = 0; j < stockPrices[ticker].prices.length; j++) {
+                        if (new Date(stockPrices[ticker].prices[j].date) <= date) {
+                            latestQuote = stockPrices[ticker].prices[j];
                         } else {
                             break;
                         }
                     }
+                    data[ticker].sharePriceIndex = j;
+                    var sharePrice = latestQuote;
+                    sharePrice.t = new Date(latestQuote.date).getTime(); // need .t to show graphs of share price
+                    data[ticker].sharePrice[0] = latestQuote;
+                    data[ticker].dates[0] = date;
                 }
             } else {
                 // Do we have new data for this day?
-                if (data[ticker].sharePriceIndex + 1 < stockPrices[ticker].prices.length && stockPrices[ticker].prices[data[ticker].sharePriceIndex+1].date.getTime() === date.getTime()) {
+                if (data[ticker].sharePriceIndex + 1 < stockPrices[ticker].prices.length && new Date(stockPrices[ticker].prices[data[ticker].sharePriceIndex+1].date).getTime() === date.getTime()
+                    && date <= tickerDateRanges[ticker].endDate) {
                     data[ticker].sharePriceIndex++;
-                    data[ticker].sharePrice.push(stockPrices[ticker].prices[data[ticker].sharePriceIndex]);
+                    var sharePrice = stockPrices[ticker].prices[data[ticker].sharePriceIndex];
+                    sharePrice.t = new Date(sharePrice.date).getTime(); // need .t to show graphs of share price
+                    data[ticker].sharePrice.push(sharePrice);
                     data[ticker].dates.push(date);
                 }
             }
         }
-        
         var tradesOnDay = [];
         while (tradeIndex < sortedTrades.length && new Date(sortedTrades[tradeIndex].date).getTime() === date.getTime()) {
             tradesOnDay.push(sortedTrades[tradeIndex]);
@@ -291,7 +299,7 @@ function getGraphData() {
                 c: sharePrice.c * data[ticker].numShares
             };
             data[ticker].holdings.push(holdings);
-            data[ticker].breakevenPerShare.push({ t: date, y: data[ticker].numShares > 0 ? ((data[ticker].bought - data[ticker].sold) / data[ticker].numShares) : 0 });
+            data[ticker].breakevenPerShare.push({ x: date.getTime(), y: data[ticker].numShares > 0 ? ((data[ticker].bought - data[ticker].sold) / data[ticker].numShares) : 0 });
             var pl = {
                 t: sharePrice.t,
                 o: data[ticker].holdings[data[ticker].holdings.length-1].o + data[ticker].sold - data[ticker].bought,
@@ -334,27 +342,27 @@ function getGraphData() {
         }
 
         // Increment date
-        date.setTime(date.getTime() + 30*60*60*1000); // add 30 hours, so we're always part-way through the next day
+        date = new Date(date.getTime() + 30*60*60*1000); // add 30 hours, so we're always part-way through the next day
         date = new Date(date.getFullYear(), date.getMonth(), date.getDate()); // Get start of day
     }
 
-    for (var i in tickers) {
-        data[tickers[i]].sharePrice = stockPrices[tickers[i]].prices;
-    }
+    // for (var i in tickers) {
+    //     data[tickers[i]].sharePrice = stockPrices[tickers[i]].prices;
+    // }
 
     data.all = allData;
     // Remove data for stocks entered and left all in one day
     // The graphs don't work with only one data point
     for (var i in tickers) {
-        if (stockPrices[tickers[i]].prices.length <= 1) {
+        if (tickerDateRanges[tickers[i]].startDate.getTime() === tickerDateRanges[tickers[i]].endDate.getTime()) {
             delete data[tickers[i]];
         }
     }
     return data;
 }
 var graphData;
-function updateStockGraphs() {
-    graphData = getGraphData();
+function updateStockGraphs(tickerDateRanges) {
+    graphData = getGraphData(tickerDateRanges);
     var tickers = Object.keys(graphData);
     tickers.splice(tickers.indexOf('all'), 1);
     tickers.sort();
@@ -460,13 +468,24 @@ function updateStockGraphs() {
         }
     }
 }
+var graphsAreOHLC = true;
 function chartTypeSelectionClicked() {
-    var isOHLC = $('#ohlcButton').is(':checked');
+    graphsAreOHLC = $('#ohlcButton').is(':checked');
+    // update all the graphs
+    $('#stocksAccordion .accordion-item').each(function() {
+        var graphContent = $(this).children('.accordion-collapse').first().attr('id');
+        graphContent = graphContent.substring('stocks-accordion-'.length);
+        chartElementSelectionClicked(graphContent);
+    });
 }
 function chartElementSelectionClicked(graph) {
+    var chart = charts[graph];
+    var chartType;
     var dataset;
     var label;
+    var tooltipUnit = '$';
     if (graph === 'all') {
+        chartType = graphsAreOHLC ? 'ohlc' : 'line';
         if ($('#holdingsButton-all').is(':checked')) {
             dataset = graphData['all'].holdings;
             label = "Total Holdings";
@@ -476,8 +495,10 @@ function chartElementSelectionClicked(graph) {
         } else if ($('#plPercentButton-all').is(':checked')) {
             dataset = graphData['all'].totalPLPercent;
             label = "Total Profit/Loss (%)"
+            tooltipUnit = '%';
         }
     } else {
+        chartType = graphsAreOHLC ? 'ohlc' : 'line';
         if ($('#sharePriceButton-' + graph).is(':checked')) {
             dataset = graphData[graph].sharePrice;
             label = graph + ' Share Price';
@@ -485,25 +506,111 @@ function chartElementSelectionClicked(graph) {
             dataset = graphData[graph].holdings;
             label = graph + ' Holdings';
         } else if ($('#breakevenButton-' + graph).is(':checked')) {
-            // TODO: line graphs
-            // dataset = graphData[graph].breakevenPerShare;
-            // label = graph + ' Breakeven per Share';
-            dataset = chart.data.datasets[0].data;
-            label = chart.data.datasets[0].label;
+            chartType = 'line';
+            dataset = graphData[graph].breakevenPerShare;
+            label = graph + ' Breakeven per Share';
         } else if ($('#plButton-' + graph).is(':checked')) {
             dataset = graphData[graph].pl;
             label = graph + ' Profit/Loss';
         } else if ($('#plPercentButton-' + graph).is(':checked')) {
             dataset = graphData[graph].plPercent;
             label = graph + ' Profit/Loss (%)';
+            tooltipUnit = '%';
         }
     }
 
-    
-    var chart = charts[graph];
-    chart.data.datasets[0].data = dataset;
-    chart.data.datasets[0].label = label;
-    chart.update();
+    if (chart.config.type !== chartType) {
+        var ctx = chart.ctx;
+        chart.destroy();
+        if (chartType === 'line') {
+            if (dataset[0].o) {
+                // it's OHLC data, so we need to convert
+                var newDataset = [];
+                for (var i in dataset) {
+                    newDataset.push({ x: dataset[i].t, y: dataset[i].c });
+                }
+                dataset = newDataset;
+            }
+            var tooltipCallback = tooltipUnit === '$' ? {
+                label(ctx) {
+                    return getPriceText(ctx.dataPoint.y);
+                }
+            } : {
+                label(ctx) {
+                    return ctx.dataPoint.y.toFixed(2) + ' %';
+                }
+            };
+            charts[graph] = chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        label: label,
+                        data: dataset,
+                    }]
+                },
+                options: {
+                    scales: Chart.defaults.financial.scales,
+                    colorschemes: {
+                        scheme: 'office.Celestial6'//'tableau.ClassicMedium10'
+                    },
+                    plugins: {
+                        tooltip: {
+                            intersect: false,
+                            mode: 'index',
+                            callbacks: tooltipCallback
+                        }
+                    }
+                },
+            });
+        } else {
+            // ohlc
+            var config = {
+                type: 'ohlc',
+                data: {
+                    datasets: [{
+                        label: label,
+                        data: dataset
+                    }]
+                }
+            };
+            if (tooltipUnit === '%') {
+                config.options = {
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label(ctx) {
+                                    const point = ctx.dataPoint;
+                
+                                    function isNullOrUndef(value) {
+                                        return value === null || typeof value === 'undefined';
+                                    }
+                                    if (!isNullOrUndef(point.y)) {
+                                        return Chart.Chart.defaults.interaction.callbacks.label(ctx);
+                                    }
+                
+                                    const {o, h, l, c} = point;
+                                    return `O: ${o.toFixed(2)+' %'}   H: ${h.toFixed(2)+' %'}   L: ${l.toFixed(2)+' %'}   C: ${c.toFixed(2)+' %'}`;
+                                }
+                            }
+                        }
+                    }
+                };
+            }
+            charts[graph] = chart = new Chart(ctx, config);
+        }
+    } else {
+        if (dataset[0].o && chartType === 'line') {
+            // it's OHLC data, so we need to convert
+            var newDataset = [];
+            for (var i in dataset) {
+                newDataset.push({ x: dataset[i].t, y: dataset[i].c });
+            }
+            dataset = newDataset;
+        }
+        chart.data.datasets[0].data = dataset;
+        chart.data.datasets[0].label = label;
+        chart.update();
+    }
 }
 
 var editingTradeIndex = undefined;
@@ -860,7 +967,7 @@ function updateStats() {
         for (var j in stats[ticker]) {
             var trade = stats[ticker][j];
             $('#trades-stats-' + ticker + '-table tbody').append(
-                '<tr' + (trade.pl > 0 ? ' class="rade-table-profit-tr"' : (trade.pl < 0 ? ' class="trade-table-loss-tr"' : '')) + '>' +
+                '<tr' + (trade.pl > 0 ? ' class="trade-table-profit-tr"' : (trade.pl < 0 ? ' class="trade-table-loss-tr"' : '')) + '>' +
                 '    <td>' + trade.date + '</td>' +
                 '    <td>' + (trade.buying ? 'Buy' : 'Sell') + '</td>' +
                 '    <td>' + trade.qty.toString() + '</td>' +
