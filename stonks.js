@@ -201,7 +201,7 @@ function getGraphData(tickerDateRanges) {
     tickers.sort();
 
     var sortedTrades = trades.slice();
-    sortedTrades.sort(function (a, b) { return a.date < b.date });
+    sortedTrades.sort(function (a, b) { return new Date(a.date).getTime() < new Date(b.date).getTime() });
     // sort is stable so same-day trades are still in the same order
 
     var data = {};
