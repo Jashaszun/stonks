@@ -285,41 +285,57 @@ function getGraphData(tickerDateRanges) {
         var anyStockHasPrice = false;
         for (var i in tickers) {
             var ticker = tickers[i];
+            var pl = { o: 0, h: 0, l: 0, c: 0 };
             if (date !== data[ticker].dates[data[ticker].dates.length-1]) {
-                continue;
+                // We don't have data for this stock on this date
+                // It's either before first trade of this stock, after last trade, or a weekend (or other market holiday)
+                if (data[ticker].pl.length > 0) {
+                    // weekend or after last trade
+                    // If it's a weekend, we can set pl anyway because allStat.totalPL won't be used, as there are no share prices
+                    var lastClosePL = data[ticker].pl[data[ticker].pl.length-1].c;
+                    pl = {
+                        o: lastClosePL,
+                        h: lastClosePL,
+                        l: lastClosePL,
+                        c: lastClosePL
+                    };
+                }
+                // If before first trade, we have no profit/loss anyway.
             } else {
                 anyStockHasPrice = true;
-            }
-            var sharePrice = data[ticker].sharePrice[data[ticker].sharePrice.length-1];
-            var holdings = {
-                t: sharePrice.t,
-                o: sharePrice.o * data[ticker].numShares,
-                h: sharePrice.h * data[ticker].numShares,
-                l: sharePrice.l * data[ticker].numShares,
-                c: sharePrice.c * data[ticker].numShares
-            };
-            data[ticker].holdings.push(holdings);
-            data[ticker].breakevenPerShare.push({ x: date.getTime(), y: data[ticker].numShares > 0 ? ((data[ticker].bought - data[ticker].sold) / data[ticker].numShares) : 0 });
-            var pl = {
-                t: sharePrice.t,
-                o: data[ticker].holdings[data[ticker].holdings.length-1].o + data[ticker].sold - data[ticker].bought,
-                h: data[ticker].holdings[data[ticker].holdings.length-1].h + data[ticker].sold - data[ticker].bought,
-                l: data[ticker].holdings[data[ticker].holdings.length-1].l + data[ticker].sold - data[ticker].bought,
-                c: data[ticker].holdings[data[ticker].holdings.length-1].c + data[ticker].sold - data[ticker].bought
-            };
-            data[ticker].pl.push(pl);
-            data[ticker].plPercent.push({
-                t: sharePrice.t,
-                o: 100 * data[ticker].pl[data[ticker].pl.length-1].o / data[ticker].bought,
-                h: 100 * data[ticker].pl[data[ticker].pl.length-1].h / data[ticker].bought,
-                l: 100 * data[ticker].pl[data[ticker].pl.length-1].l / data[ticker].bought,
-                c: 100 * data[ticker].pl[data[ticker].pl.length-1].c / data[ticker].bought
-            });
 
-            allStat.holdings.o += holdings.o;
-            allStat.holdings.h += holdings.h;
-            allStat.holdings.l += holdings.l;
-            allStat.holdings.c += holdings.c;
+                var sharePrice = data[ticker].sharePrice[data[ticker].sharePrice.length-1];
+                var holdings = {
+                    t: sharePrice.t,
+                    o: sharePrice.o * data[ticker].numShares,
+                    h: sharePrice.h * data[ticker].numShares,
+                    l: sharePrice.l * data[ticker].numShares,
+                    c: sharePrice.c * data[ticker].numShares
+                };
+                data[ticker].holdings.push(holdings);
+                data[ticker].breakevenPerShare.push({ x: date.getTime(), y: data[ticker].numShares > 0 ? ((data[ticker].bought - data[ticker].sold) / data[ticker].numShares) : 0 });
+                pl = {
+                    t: sharePrice.t,
+                    o: data[ticker].holdings[data[ticker].holdings.length-1].o + data[ticker].sold - data[ticker].bought,
+                    h: data[ticker].holdings[data[ticker].holdings.length-1].h + data[ticker].sold - data[ticker].bought,
+                    l: data[ticker].holdings[data[ticker].holdings.length-1].l + data[ticker].sold - data[ticker].bought,
+                    c: data[ticker].holdings[data[ticker].holdings.length-1].c + data[ticker].sold - data[ticker].bought
+                };
+                data[ticker].pl.push(pl);
+                data[ticker].plPercent.push({
+                    t: sharePrice.t,
+                    o: 100 * data[ticker].pl[data[ticker].pl.length-1].o / data[ticker].bought,
+                    h: 100 * data[ticker].pl[data[ticker].pl.length-1].h / data[ticker].bought,
+                    l: 100 * data[ticker].pl[data[ticker].pl.length-1].l / data[ticker].bought,
+                    c: 100 * data[ticker].pl[data[ticker].pl.length-1].c / data[ticker].bought
+                });
+
+                allStat.holdings.o += holdings.o;
+                allStat.holdings.h += holdings.h;
+                allStat.holdings.l += holdings.l;
+                allStat.holdings.c += holdings.c;
+            }
+            
             allStat.totalPL.o += pl.o;
             allStat.totalPL.h += pl.h;
             allStat.totalPL.l += pl.l;
@@ -463,8 +479,7 @@ function updateStockGraphs(tickerDateRanges) {
                 }
             });
         } else {
-            charts[ticker].data.datasets[0].data = tickerData.sharePrice;
-            charts[ticker].update();
+            chartTypeSelectionClicked(); // Act as if a button was pressed, to update all graphs
         }
     }
 }
@@ -552,7 +567,7 @@ function chartElementSelectionClicked(graph) {
                 options: {
                     scales: Chart.defaults.financial.scales,
                     colorschemes: {
-                        scheme: 'brewer.SetOne9'//'office.Celestial6'//'tableau.ClassicMedium10'
+                        scheme: 'tableau.ClassicTrafficLight9'//'brewer.SetOne9'//'office.Celestial6'//'tableau.ClassicMedium10'
                     },
                     plugins: {
                         tooltip: {
@@ -714,6 +729,8 @@ function updateTrade(index, newTrade) {
         '    <td><button type="button" class="btn-close" onclick="removeTradeBtnClicked(this)"></button></td>' +
         '</tr>'
     );
+
+    updateStats();
 }
 function removeTrade(index) {
     trades.splice(index, 1);
@@ -905,6 +922,7 @@ function updateStats() {
                 '                        <th scope="col">Price</th>' +
                 '                        <th scope="col">Stock Bought</th>' +
                 '                        <th scope="col">Stock Sold</th>' +
+                '                        <th scope="col"># Shares</th>' +
                 '                        <th scope="col">Breakeven / Share</th>' +
                 '                        <th scope="col">P/L</th>' +
                 '                        <th scope="col">%</th>' +
@@ -967,6 +985,7 @@ function updateStats() {
                 '    <td>' + getPriceText(trade.price) + '</td>' +
                 '    <td>' + getPriceText(trade.stockBought) + '</td>' +
                 '    <td>' + getPriceText(trade.stockSold) + '</td>' +
+                '    <td>' + trade.lots.length.toString() + '</td>' +
                 '    <td>' + getPriceText(trade.breakevenPerShare) + '</td>' +
                 '    <td>' + getPriceText(trade.pl) + '</td>' +
                 '    <td>' + (trade.plPercent !== undefined ? trade.plPercent.toFixed(2) + ' %' : '-') + '</td>' +
