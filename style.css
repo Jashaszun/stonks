@@ -25,3 +25,7 @@ html, body {
 .cancel-trade-edit-btn-not-displayed {
     display: none;
 }
+
+#trade-sort-icon {
+    cursor: pointer;
+}

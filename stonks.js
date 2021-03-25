@@ -238,15 +238,16 @@ function getGraphData(tickerDateRanges) {
                     // We have data for the current date
                     // Get the latest quote before or on the current date
                     var latestQuote;
-                    var j;
-                    for (j = 0; j < stockPrices[ticker].prices.length; j++) {
+                    var sharePriceIndex;
+                    for (var j = 0; j < stockPrices[ticker].prices.length; j++) {
                         if (new Date(stockPrices[ticker].prices[j].date) <= date) {
                             latestQuote = stockPrices[ticker].prices[j];
+                            sharePriceIndex = j;
                         } else {
                             break;
                         }
                     }
-                    data[ticker].sharePriceIndex = j;
+                    data[ticker].sharePriceIndex = sharePriceIndex;
                     var sharePrice = latestQuote;
                     sharePrice.t = new Date(latestQuote.date).getTime(); // need .t to show graphs of share price
                     data[ticker].sharePrice[0] = latestQuote;
@@ -478,10 +479,9 @@ function updateStockGraphs(tickerDateRanges) {
                     }]
                 }
             });
-        } else {
-            chartTypeSelectionClicked(); // Act as if a button was pressed, to update all graphs
         }
     }
+    chartTypeSelectionClicked(); // Act as if a button was pressed, to update all graphs
 }
 var graphsAreOHLC = true;
 function chartTypeSelectionClicked() {
@@ -694,13 +694,14 @@ function removeTradeBtnClicked(removeBtn) {
     removeTrade(removeIndex);
 }
 
+var tradeSortAscending = false;
 function addTrade(trade, addingBulk) {
     if (!addingBulk) {
         trades.push(trade);
         saveTrades();
     }
 
-    $('#trades-table tbody').append(
+    var newRow = 
         '<tr class="trade-table-tr trade-table-' + (trade.buying ? 'buy' : 'sell') + '-tr" ondblclick="tradeDoubleClicked(this)">' +
         '    <td>' + trade.date + '</td>' +
         '    <td>' + (trade.buying ? 'Buy' : 'Sell') + '</td>' +
@@ -708,8 +709,12 @@ function addTrade(trade, addingBulk) {
         '    <td>' + trade.qty.toString() + '</td>' +
         '    <td>' + getPriceText(trade.price) + '</td>' +
         '    <td><button type="button" class="btn-close" onclick="removeTradeBtnClicked(this)"></button></td>' +
-        '</tr>'
-    );
+        '</tr>';
+    if (tradeSortAscending) {
+        $('#trades-table tbody').append(newRow);
+    } else {
+        $('#trades-table tbody').prepend(newRow);
+    }
 
     if (!addingBulk) {
         updateStats();
@@ -719,7 +724,8 @@ function updateTrade(index, newTrade) {
     trades[index] = newTrade;
     saveTrades();
 
-    $('#trades-table tbody').find('tr').eq(index).replaceWith(
+    var rowIndex = tradeSortAscending ? index : (trades.length - 1 - index);
+    $('#trades-table tbody').find('tr').eq(rowIndex).replaceWith(
         '<tr class="trade-table-tr trade-table-' + (newTrade.buying ? 'buy' : 'sell') + '-tr" ondblclick="tradeDoubleClicked(this)">' +
         '    <td>' + newTrade.date + '</td>' +
         '    <td>' + (newTrade.buying ? 'Buy' : 'Sell') + '</td>' +
@@ -736,7 +742,8 @@ function removeTrade(index) {
     trades.splice(index, 1);
     saveTrades();
 
-    $('#trades-table tbody').find('tr').eq(index).remove();
+    var rowIndex = tradeSortAscending ? index : (trades.length - 1 - index);
+    $('#trades-table tbody').find('tr').eq(rowIndex).remove();
 
     updateStats();
 }
@@ -752,6 +759,10 @@ function tradeDoubleClicked(tradeRowElem) {
     clearSelection();
 
     editingTradeIndex = tradeRowElem.rowIndex - 1; // 0 is the header
+    if (!tradeSortAscending) {
+        editingTradeIndex = trades.length - 1 - editingTradeIndex;
+    }
+
     var trade = trades[editingTradeIndex];
     $('#tradeDate').val(trade.date);
     $('#buyButton').prop('checked', trade.buying);
@@ -1000,4 +1011,24 @@ function updateStats() {
 
     // Now we update the graphs
     updateGraphs();
+}
+
+function changeTradeSorting() {
+    tradeSortAscending = !tradeSortAscending;
+    var rowHTML = [];
+    $('#trades-table tbody tr').each(function() {
+        rowHTML.splice(0, 0, $(this).html());
+    });
+    $('#trades-table tbody tr').each(function() {
+        var html = rowHTML.splice(0, 1)[0];
+        $(this).html(html);
+    });
+
+    if (tradeSortAscending) {
+        $('#trade-sort-icon').removeClass('bi-caret-down-fill');
+        $('#trade-sort-icon').addClass('bi-caret-up-fill');
+    } else {
+        $('#trade-sort-icon').removeClass('bi-caret-up-fill');
+        $('#trade-sort-icon').addClass('bi-caret-down-fill');
+    }
 }

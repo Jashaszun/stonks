@@ -66,7 +66,7 @@
                         <label class="col-form-label col-md-4" for="quantityInputGroup">Quantity</label>
                         <div class="col-md-8">
                             <div class="input-group col-md-8" id="quantityInputGroup">
-                                <div class="input-group-prepend"><span class="input-group-text">Shares</span></div>
+                                <div class="input-group-prepend"><span id="quantity-unit-span" class="input-group-text">Shares</span></div>
                                 <input type="number" class="form-control" id="quantityInput" placeholder="1" min="1">
                             </div>
                         </div>
@@ -75,7 +75,7 @@
                         <label class="col-form-label col-md-4" for="priceInputGroup">Price</label>
                         <div class="col-md-8">
                             <div class="input-group col-md-8" id="priceInputGroup">
-                                <div class="input-group-prepend"><span class="input-group-text">$</span></div>
+                                <div class="input-group-prepend"><span class="input-group-text">$/Share</span></div>
                                 <input type="number" class="form-control" id="priceInput" placeholder="100.0000" min="0.0001" step="0.0001">
                             </div>
                         </div>
@@ -103,26 +103,10 @@
                                 <th scope="col">Ticker</th>
                                 <th scope="col">Qty</th>
                                 <th scope="col">Price</th>
-                                <th scope="col"></th>
+                                <th scope="col"><i id="trade-sort-icon" class="bi bi-caret-up-fill trade-sort-icon" onclick="changeTradeSorting()"></i></th>
                             </tr>
                         </thead>
                         <tbody>
-                            <!-- <tr class="trade-table-tr trade-table-buy-tr" ondblclick="tradeDoubleClicked(this)">
-                                <td>3/30/2020</td>
-                                <td>Buy</td>
-                                <td>LUV</td>
-                                <td>80</td>
-                                <td>$30.0000</td>
-                                <td><button type="button" class="btn-close" onclick="removeTradeBtnClicked(this)"></button></td>
-                            </tr>
-                            <tr class="trade-table-tr trade-table-sell-tr" ondblclick="tradeDoubleClicked(this)">
-                                <td>3/31/2020</td>
-                                <td>Sell</td>
-                                <td>LUV</td>
-                                <td>80</td>
-                                <td>$420.6969</td>
-                                <td><button type="button" class="btn-close" onclick="removeTradeBtnClicked(this)"></button></td>
-                            </tr> -->
                         </tbody>
                     </table>
                 </div>
