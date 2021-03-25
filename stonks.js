@@ -77,6 +77,15 @@ window.onload = function(e) {
                 return value;
             }*/);
         }
+        if (window.localStorage.getItem('tradesTableSorting')) {
+            var sorting = window.localStorage.getItem('tradesTableSorting');
+            if (sorting === 'ascending') {
+                tradeSortAscending = true;
+            } else if (sorting === 'descending') {
+                tradeSortAscending = false;
+            }
+        }
+        updateTradeSorting();
         if (window.localStorage.getItem("trades")) {
             trades = JSON.parse(window.localStorage.getItem("trades"));
             for (var i in trades) {
@@ -1015,6 +1024,11 @@ function updateStats() {
 
 function changeTradeSorting() {
     tradeSortAscending = !tradeSortAscending;
+    updateTradeSorting();
+}
+function updateTradeSorting() {
+    window.localStorage.setItem('tradesTableSorting', tradeSortAscending ? 'ascending' : 'descending');
+
     var rowHTML = [];
     $('#trades-table tbody tr').each(function() {
         rowHTML.splice(0, 0, $(this).html());
@@ -1025,10 +1039,10 @@ function changeTradeSorting() {
     });
 
     if (tradeSortAscending) {
-        $('#trade-sort-icon').removeClass('bi-caret-down-fill');
-        $('#trade-sort-icon').addClass('bi-caret-up-fill');
-    } else {
         $('#trade-sort-icon').removeClass('bi-caret-up-fill');
         $('#trade-sort-icon').addClass('bi-caret-down-fill');
+    } else {
+        $('#trade-sort-icon').removeClass('bi-caret-down-fill');
+        $('#trade-sort-icon').addClass('bi-caret-up-fill');
     }
 }
