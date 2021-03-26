@@ -67,15 +67,7 @@ window.onload = function(e) {
 
     if (storageAvailable('localStorage')) {
         if (window.localStorage.getItem("stockPrices")) {
-            stockPrices = JSON.parse(window.localStorage.getItem("stockPrices")/*, function (key, value) {
-                // startDate and endDate are in top level for each ticker
-                // date is in each price object within the prices of each ticker
-                // They're strings, but we want Date objects
-                if (key === 'startDate' || key === 'endDate' || key === 'date') {
-                    return new Date(value);
-                }
-                return value;
-            }*/);
+            // stockPrices = JSON.parse(window.localStorage.getItem("stockPrices"));
         }
         if (window.localStorage.getItem('tradesTableSorting')) {
             var sorting = window.localStorage.getItem('tradesTableSorting');
@@ -668,6 +660,7 @@ function addTradeBtnClicked() {
             addTrade(trade, false);
         } else {
             updateTrade(editingTradeIndex, trade);
+            editingTradeIndex = undefined;
         }
 
         $('#tradeDate').val(getTodayDate().toLocaleString().split(',')[0]);
@@ -700,6 +693,9 @@ function cancelTradeEditBtnClicked() {
 }
 function removeTradeBtnClicked(removeBtn) {
     var removeIndex = removeBtn.parentElement.parentElement.rowIndex - 1; // 0 is the header
+    if (!tradeSortAscending) {
+        removeIndex = trades.length - 1 - removeIndex;
+    }
     removeTrade(removeIndex);
 }
 
@@ -748,11 +744,11 @@ function updateTrade(index, newTrade) {
     updateStats();
 }
 function removeTrade(index) {
-    trades.splice(index, 1);
-    saveTrades();
-
     var rowIndex = tradeSortAscending ? index : (trades.length - 1 - index);
     $('#trades-table tbody').find('tr').eq(rowIndex).remove();
+
+    trades.splice(index, 1);
+    saveTrades();
 
     updateStats();
 }
