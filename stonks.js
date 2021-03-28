@@ -20,6 +20,9 @@ function getTodayDate() {
     var date = new Date();
     return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
+function getOptionStr(trade, includeTicker = true) {
+    return (includeTicker ? trade.ticker + ' ' : '') + trade.expiration + ' ' + trade.strike.toString() + (trade.isCall ? 'C' : 'P');
+}
 
 function storageAvailable(type) {
     var storage;
@@ -81,8 +84,12 @@ window.onload = function(e) {
         if (window.localStorage.getItem("trades")) {
             trades = JSON.parse(window.localStorage.getItem("trades"));
             for (var i in trades) {
+                if (!('isShares' in trades[i])) {
+                    trades[i].isShares = true;
+                }
                 addTrade(trades[i], true);
             }
+            saveTrades(); // If they needed to be updated
             updateStats();
         }
     } else {
@@ -624,13 +631,22 @@ function chartElementSelectionClicked(graph) {
 
 var editingTradeIndex = undefined;
 function addTradeBtnClicked() {
+    var optionRegex = /^([^ ]+) ((?:1|2|3|4|5|6|7|8|9|10|11|12)\/(?:1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31)(?:\/(?:\d\d)?\d\d)?) (\d+(?:\.\d+)?)([CP])$/;
+
+    var isShares = $('#sharesButton').is(':checked');
     var date = $('#tradeDate').val();
     var buying = $('#buyButton').is(':checked');
     var ticker = $('#tickerInput').val();
     var qty = $('#quantityInput').val();
     var price = $('#priceInput').val();
 
-    if (ticker) {
+    var symbolValid = true;
+    if (isShares) {
+        symbolValid = !!ticker;
+    } else {
+        symbolValid = optionRegex.test(ticker);
+    }
+    if (symbolValid) {
         $('#tickerInput').removeClass('is-invalid');
     } else  {
         $('#tickerInput').addClass('is-invalid');
@@ -648,14 +664,28 @@ function addTradeBtnClicked() {
         $('#priceInput').addClass('is-invalid');
     }
 
-    if (ticker && qty && price) {
+    if (symbolValid && qty && price) {
         var trade = {
+            isShares: isShares,
             date: date,
             buying: buying,
             ticker: ticker,
             qty: parseInt(qty),
             price: parseFloat(price)
         };
+        if (!isShares) {
+            var regexGroups = optionRegex.exec(ticker);
+            trade.ticker = regexGroups[1];
+            trade.expiration = regexGroups[2];
+            if (trade.expiration.length <= 5) {
+                // doesn't have a year, so add current year
+                // max without a year is "MM/DD" = 5 chars
+                // min with a year is "M/D/YY" = 6 chars
+                trade.expiration += '/' + (new Date().getFullYear() % 100).toString().padStart(2, '0');
+            }
+            trade.strike = parseFloat(regexGroups[3]);
+            trade.isCall = regexGroups[4] === "C";
+        }
         if (editingTradeIndex === undefined) {
             addTrade(trade, false);
         } else {
@@ -709,8 +739,8 @@ function addTrade(trade, addingBulk) {
     var newRow = 
         '<tr class="trade-table-tr trade-table-' + (trade.buying ? 'buy' : 'sell') + '-tr" ondblclick="tradeDoubleClicked(this)">' +
         '    <td>' + trade.date + '</td>' +
-        '    <td>' + (trade.buying ? 'Buy' : 'Sell') + '</td>' +
-        '    <td>' + trade.ticker + '</td>' +
+        '    <td>' + (trade.isShares ? (trade.buying ? 'Buy' : 'Sell') : ((trade.buying ? 'B' : 'S') + 'T' + (trade.toOpen ? 'O' : 'C'))) + '</td>' +
+        '    <td>' + (trade.isShares ? trade.ticker : (trade.ticker + ' ' + trade.expiration + '<br/>' + trade.strike.toString() + (trade.isCall ? 'C' : 'P'))) + '</td>' +
         '    <td>' + trade.qty.toString() + '</td>' +
         '    <td>' + getPriceText(trade.price) + '</td>' +
         '    <td><button type="button" class="btn-close" onclick="removeTradeBtnClicked(this)"></button></td>' +
@@ -733,8 +763,8 @@ function updateTrade(index, newTrade) {
     $('#trades-table tbody').find('tr').eq(rowIndex).replaceWith(
         '<tr class="trade-table-tr trade-table-' + (newTrade.buying ? 'buy' : 'sell') + '-tr" ondblclick="tradeDoubleClicked(this)">' +
         '    <td>' + newTrade.date + '</td>' +
-        '    <td>' + (newTrade.buying ? 'Buy' : 'Sell') + '</td>' +
-        '    <td>' + newTrade.ticker + '</td>' +
+        '    <td>' + (newTrade.isShares ? (newTrade.buying ? 'Buy' : 'Sell') : ((newTrade.buying ? 'B' : 'S') + 'T' + (newTrade.toOpen ? 'O' : 'C'))) + '</td>' +
+        '    <td>' + (newTrade.isShares ? newTrade.ticker : (newTrade.ticker + ' ' + newTrade.expiration + '<br/>' + newTrade.strike.toString() + (newTrade.isCall ? 'C' : 'P'))) + '</td>' +
         '    <td>' + newTrade.qty.toString() + '</td>' +
         '    <td>' + getPriceText(newTrade.price) + '</td>' +
         '    <td><button type="button" class="btn-close" onclick="removeTradeBtnClicked(this)"></button></td>' +
@@ -769,10 +799,13 @@ function tradeDoubleClicked(tradeRowElem) {
     }
 
     var trade = trades[editingTradeIndex];
+    $('#sharesButton').prop('checked', trade.isShares);
+    $('#optionsButton').prop('checked', !trade.isShares);
+    sharesOptionsSelectionChanged();
     $('#tradeDate').val(trade.date);
     $('#buyButton').prop('checked', trade.buying);
     $('#sellButton').prop('checked', !trade.buying);
-    $('#tickerInput').val(trade.ticker);
+    $('#tickerInput').val(trade.isShares ? trade.ticker : (trade.ticker + ' ' + trade.expiration + ' ' + trade.strike.toString() + (trade.isCall ? 'C' : 'P')));
     $('#quantityInput').val(trade.qty.toString());
     $('#priceInput').val(trade.price.toFixed(4));
     $('#tickerInput').removeClass('is-invalid');
@@ -795,7 +828,7 @@ function getTradeStats() {
                 ticker: trades[i].ticker,
                 qty: 0,
                 price: 0,
-                lots: [],
+                lots: {'shares':[]},
                 stockBought: 0,
                 stockSold: 0,
                 totalBought: 0,
@@ -815,7 +848,6 @@ function getTradeStats() {
         ticker: '',
         qty: 0,
         price: 0,
-        lots: [],
         totalBought: 0,
         totalSold: 0,
         pl: undefined,
@@ -831,62 +863,100 @@ function getTradeStats() {
 
         var prevStockTrade = prevTradesByTicker[trade.ticker];
 
+        var tradeValue = (trade.qty * trade.price) * (trade.isShares ? 1 : 100);
+        var tradeBought = trade.buying ? tradeValue : 0;
+        var tradeSold = !trade.buying ? tradeValue : 0;
+
         var stat = {
             date: trade.date,
+            isShares: trade.isShares,
             buying: trade.buying,
-            ticker: trade.ticker,
+            symbol: trade.isShares ? trade.ticker : getOptionStr(trade),
             qty: trade.qty,
             price: trade.price,
-            stockBought: prevStockTrade.stockBought + (trade.buying ? trade.qty * trade.price : 0),
-            stockSold: prevStockTrade.stockSold + (!trade.buying ? trade.qty * trade.price : 0),
-            totalBought: prevAllTrade.totalBought + (trade.buying ? trade.qty * trade.price : 0),
-            totalSold: prevAllTrade.totalSold + (!trade.buying ? trade.qty * trade.price : 0),
+            stockBought: prevStockTrade.stockBought + tradeBought,
+            stockSold: prevStockTrade.stockSold + tradeSold,
+            totalBought: prevAllTrade.totalBought + tradeBought,
+            totalSold: prevAllTrade.totalSold + tradeSold,
+            lots: {}
         };
         var allStat = {
             date: trade.date,
+            isShares: trade.isShares,
             buying: trade.buying,
-            ticker: trade.ticker,
+            symbol: trade.isShares ? trade.ticker : getOptionStr(trade),
             qty: trade.qty,
             price: trade.price,
-            totalBought: prevAllTrade.totalBought + (trade.buying ? trade.qty * trade.price : 0),
-            totalSold: prevAllTrade.totalSold + (!trade.buying ? trade.qty * trade.price : 0),
+            totalBought: prevAllTrade.totalBought + tradeBought,
+            totalSold: prevAllTrade.totalSold + tradeSold,
         };
-        if (trade.buying) {
-            stat.lots = prevStockTrade.lots.concat(new Array(trade.qty).fill(trade.price));
-            stat.pl = undefined;
-            stat.plPercent = undefined;
-            stat.stockPL = prevStockTrade.stockPL;
-            stat.stockPLPercent = (stat.stockPL !== undefined ? 100*stat.stockPL/stat.stockBought : undefined);
-            stat.totalPL = prevStockTrade.totalPL;
-            stat.totalPLPercent = (stat.totalPL !== undefined ? 100*stat.totalPL/stat.totalBought : undefined);
-
-            allStat.lots = stat.lots.slice();
-            allStat.pl = undefined;
-            allStat.plPercent = undefined;
-            allStat.totalPL = prevAllTrade.totalPL;
-            allStat.totalPLPercent = (allStat.totalPL !== undefined ? 100*allStat.totalPL/allStat.totalBought : undefined);
-        } else {
-            var lots = prevStockTrade.lots.slice();
-            var soldLots = lots.splice(0, trade.qty);
-            stat.lots = lots;
-            stat.pl = 0;
-            for (var l in soldLots) {
-                stat.pl += trade.price - soldLots[l];
-            }
-            stat.plPercent = 100*stat.pl/stat.stockBought;
-            stat.stockPL = (prevStockTrade.stockPL === undefined ? 0 : prevStockTrade.totalPL) + stat.pl;
-            stat.stockPLPercent = 100*stat.stockPL/stat.stockBought;
-            stat.totalPL = (prevStockTrade.totalPL === undefined ? 0 : prevStockTrade.totalPL) + stat.pl;
-            stat.totalPLPercent = 100*stat.totalPL/stat.totalBought;
-
-            allStat.lots = stat.lots.slice();
-            allStat.pl = stat.pl;
-            allStat.plPercent = 100*allStat.pl/allStat.totalBought;
-            allStat.totalPL = (prevAllTrade.totalPL === undefined ? 0 : prevAllTrade.totalPL) + allStat.pl;
-            allStat.totalPLPercent = 100*allStat.totalPL/allStat.totalBought;
+        if (!trade.isShares) {
+            stat.toOpen = allStat.toOpen = trade.toOpen;
+            stat.expiration = allStat.expiration = trade.expiration;
+            stat.strike = allStat.strike = trade.strike;
+            stat.isCall = allStat.isCall = trade.isCall;
         }
+        var prevLotKeys = Object.keys(prevStockTrade.lots);
+        for (var key in prevLotKeys) {
+            stat.lots[prevLotKeys[key]] = prevStockTrade.lots[prevLotKeys[key]].slice();
+        }
+        var pl;
+        if (trade.isShares) {
+            if (trade.buying) {
+                pl = undefined;
+                stat.lots.shares = stat.lots.shares.concat(new Array(trade.qty).fill(trade.price));
+            } else {
+                pl = 0;
+                var soldLots = stat.lots.shares.splice(0, trade.qty);
+                for (var l in soldLots) {
+                    pl += trade.price - soldLots[l];
+                }
+            }
 
-        stat.breakevenPerShare = stat.lots.length > 0 ? ((stat.stockBought - stat.stockSold) / stat.lots.length) : undefined;
+        } else {
+            // Options!
+            // If BTO or STC, it's a Long option (you bought it)
+            // If STO or BTC, it's a Short option (you sold it)
+            var option = (trade.buying === trade.toOpen ? 'Long ' : 'Short ') + getOptionStr(trade, false);
+            if (trade.toOpen) {
+                if (!(option in stat.lots)) {
+                    stat.lots[option] = [];
+                }
+                stat.lots[option] = stat.lots[option].concat(new Array(trade.qty).fill(trade.price));
+
+                if (trade.buying) {
+                    // BTO
+                    pl = -trade.qty * trade.price * 100;
+                } else {
+                    // STO
+                    pl = trade.qty * trade.price * 100;
+                }
+            } else {
+                // Closing
+                pl = 0;
+                var closedLots = stat.lots[option].splice(0, trade.qty);
+                for (var l in closedLots) {
+                    pl += trade.price - closedLots[l];
+                }
+                pl *= 100;
+                if (trade.buying) {
+                    pl = -pl; // E.g. STO @ 5, BTC @ 1 = 4 profit
+                }
+            }
+        }
+        stat.pl = pl;
+        stat.plPercent = (stat.pl !== undefined && stat.stockBought > 0) ? (100*stat.pl/stat.stockBought) : undefined;
+        stat.stockPL = (stat.pl === undefined) ? prevStockTrade.stockPL : ((prevStockTrade.stockPL === undefined ? 0 : prevStockTrade.stockPL) + stat.pl);
+        stat.stockPLPercent = (stat.stockPL !== undefined && stat.stockBought > 0) ? (100*stat.stockPL/stat.stockBought) : undefined;
+        stat.totalPL = (stat.pl === undefined) ? prevStockTrade.totalPL : ((prevStockTrade.totalPL === undefined ? 0 : prevStockTrade.totalPL) + stat.pl);
+        stat.totalPLPercent = (stat.totalPL !== undefined && stat.totalBought > 0) ? (100*stat.totalPL/stat.totalBought) : undefined;
+        
+        allStat.pl = pl;
+        allStat.plPercent = (allStat.pl !== undefined && allStat.totalBought > 0) ? (100*allStat.pl/allStat.totalBought) : undefined;
+        allStat.totalPL = (allStat.pl === undefined) ? prevAllTrade.totalPL : ((prevAllTrade.totalPL === undefined ? 0 : prevAllTrade.totalPL) + allStat.pl);
+        allStat.totalPLPercent = (allStat.totalPL !== undefined && allStat.totalBought > 0) ? (100*allStat.totalPL/allStat.totalBought) : undefined;
+
+        stat.breakevenPerShare = stat.lots.shares.length > 0 ? ((stat.stockBought - stat.stockSold) / stat.lots.shares.length) : undefined;
 
         stats[trade.ticker].push(stat);
         allStats.push(allStat);
@@ -934,6 +1004,7 @@ function updateStats() {
                 '                    <tr>' +
                 '                        <th scope="col">Date</th>' +
                 '                        <th scope="col">Type</th>' +
+                '                        <th scope="col">Symbol</th>' +
                 '                        <th scope="col">Qty</th>' +
                 '                        <th scope="col">Price</th>' +
                 '                        <th scope="col">Stock Bought</th>' +
@@ -976,8 +1047,8 @@ function updateStats() {
         $('#trades-stats-all-table tbody').append(
             '<tr' + (trade.pl > 0 ? ' class="trade-table-profit-tr"' : (trade.pl < 0 ? ' class="trade-table-loss-tr"' : '')) + '>' +
             '    <td>' + trade.date + '</td>' +
-            '    <td>' + (trade.buying ? 'Buy' : 'Sell') + '</td>' +
-            '    <td>' + trade.ticker + '</td>' +
+            '    <td>' + (trade.isShares ? (trade.buying ? 'Buy' : 'Sell') : ((trade.buying ? 'B' : 'S') + 'T' + (trade.toOpen ? 'O' : 'C'))) + '</td>' +
+            '    <td>' + trade.symbol + '</td>' +
             '    <td>' + trade.qty.toString() + '</td>' +
             '    <td>' + getPriceText(trade.price) + '</td>' +
             '    <td>' + getPriceText(trade.totalBought) + '</td>' +
@@ -996,12 +1067,13 @@ function updateStats() {
             $('#trades-stats-' + ticker + '-table tbody').append(
                 '<tr' + (trade.pl > 0 ? ' class="trade-table-profit-tr"' : (trade.pl < 0 ? ' class="trade-table-loss-tr"' : '')) + '>' +
                 '    <td>' + trade.date + '</td>' +
-                '    <td>' + (trade.buying ? 'Buy' : 'Sell') + '</td>' +
+                '    <td>' + (trade.isShares ? (trade.buying ? 'Buy' : 'Sell') : ((trade.buying ? 'B' : 'S') + 'T' + (trade.toOpen ? 'O' : 'C'))) + '</td>' +
+                '    <td>' + trade.symbol + '</td>' +
                 '    <td>' + trade.qty.toString() + '</td>' +
                 '    <td>' + getPriceText(trade.price) + '</td>' +
                 '    <td>' + getPriceText(trade.stockBought) + '</td>' +
                 '    <td>' + getPriceText(trade.stockSold) + '</td>' +
-                '    <td>' + trade.lots.length.toString() + '</td>' +
+                '    <td>' + trade.lots.shares.length.toString() + '</td>' +
                 '    <td>' + getPriceText(trade.breakevenPerShare) + '</td>' +
                 '    <td>' + getPriceText(trade.pl) + '</td>' +
                 '    <td>' + (trade.plPercent !== undefined ? trade.plPercent.toFixed(2) + ' %' : '-') + '</td>' +
@@ -1040,5 +1112,21 @@ function updateTradeSorting() {
     } else {
         $('#trade-sort-icon').removeClass('bi-caret-down-fill');
         $('#trade-sort-icon').addClass('bi-caret-up-fill');
+    }
+}
+
+function sharesOptionsSelectionChanged() {
+    var isShares = $('#sharesButton').is(':checked');
+
+    $('#ticker-option-label').html(isShares ? 'Ticker' : 'Option');
+    $('#tickerInput').attr('placeholder', isShares ? 'Ex: GME' : 'Ex: GME 4/16 180C');
+    $('#quantity-unit-span').html(isShares ? 'Shares' : 'Contracts');
+    $('#price-input-label').html(isShares ? 'Price' : 'Premium');
+    if (isShares) {
+        $('#buySellGroup-shares').removeClass('tradeActionGroup-not-displayed');
+        $('#buySellGroup-options').addClass('tradeActionGroup-not-displayed');
+    } else {
+        $('#buySellGroup-options').removeClass('tradeActionGroup-not-displayed');
+        $('#buySellGroup-shares').addClass('tradeActionGroup-not-displayed');
     }
 }

@@ -47,7 +47,17 @@
                         </div>
                     </div>
                     <div class="mb-2 row">
-                        <label class="col-form-label col-md-4" for="buySellGroup">Type</label>
+                        <label class="col-form-label col-md-4" for="sharesOptionsGroup">Security Type</label>
+                        <div class="btn-group col-md-8" role="group" id="sharesOptionsGroup">
+                            <input type="radio" class="btn-check" name="sharesOptionsSelection" id="sharesButton" autocomplete="off" onclick="sharesOptionsSelectionChanged()" checked>
+                            <label class="btn btn-outline-primary" for="sharesButton">Shares</label>
+                          
+                            <input type="radio" class="btn-check" name="sharesOptionsSelection" id="optionsButton" autocomplete="off" onclick="sharesOptionsSelectionChanged()" >
+                            <label class="btn btn-outline-primary" for="optionsButton">Options</label>
+                        </div>
+                    </div>
+                    <div id="buySellGroup-shares" class="mb-2 row">
+                        <label class="col-form-label col-md-4" for="buySellGroup">Order Type</label>
                         <div class="btn-group col-md-8" role="group" id="buySellGroup">
                             <input type="radio" class="btn-check" name="buySellSelection" id="buyButton" autocomplete="off" checked>
                             <label class="btn btn-outline-success" for="buyButton">Buy</label>
@@ -56,8 +66,22 @@
                             <label class="btn btn-outline-danger" for="sellButton">Sell</label>
                         </div>
                     </div>
+                    <div id="buySellGroup-options" class="tradeActionGroup-not-displayed mb-2 row">
+                        <label class="col-form-label col-md-4" for="buySellOptionGroup">Order Type</label>
+                        <div class="btn-group col-md-8" role="group" id="buySellOptionGroup">
+                            <input type="radio" class="btn-check" name="buySellOptionSelection" id="btoButton" autocomplete="off" checked>
+                            <label class="btn btn-outline-success" for="btoButton">BTO</label>
+                            <input type="radio" class="btn-check" name="buySellOptionSelection" id="btcButton" autocomplete="off">
+                            <label class="btn btn-outline-danger" for="btcButton">BTC</label>
+                          
+                            <input type="radio" class="btn-check" name="buySellOptionSelection" id="stoButton" autocomplete="off">
+                            <label class="btn btn-outline-success" for="stoButton">STO</label>
+                            <input type="radio" class="btn-check" name="buySellOptionSelection" id="stcButton" autocomplete="off">
+                            <label class="btn btn-outline-danger" for="stoButton">STC</label>
+                        </div>
+                    </div>
                     <div class="mb-2 row">
-                        <label class="col-form-label col-md-4" for="tickerInput">Ticker</label>
+                        <label class="col-form-label col-md-4" for="tickerInput" id="ticker-option-label">Ticker</label>
                         <div class="col-md-8">
                             <input type="text" class="form-control" id="tickerInput" placeholder="Ex: GME">
                         </div>
@@ -72,7 +96,7 @@
                         </div>
                     </div>
                     <div class="mb-2 row">
-                        <label class="col-form-label col-md-4" for="priceInputGroup">Price</label>
+                        <label class="col-form-label col-md-4" for="priceInputGroup" id="price-input-label">Price</label>
                         <div class="col-md-8">
                             <div class="input-group col-md-8" id="priceInputGroup">
                                 <div class="input-group-prepend"><span class="input-group-text">$/Share</span></div>
@@ -100,7 +124,7 @@
                             <tr>
                                 <th scope="col">Date</th>
                                 <th scope="col">Type</th>
-                                <th scope="col">Ticker</th>
+                                <th scope="col">Symbol</th>
                                 <th scope="col">Qty</th>
                                 <th scope="col">Price</th>
                                 <th scope="col"><i id="trade-sort-icon" class="bi bi-caret-up-fill trade-sort-icon" onclick="changeTradeSorting()"></i></th>
@@ -140,7 +164,7 @@
                                                     <tr>
                                                         <th scope="col">Date</th>
                                                         <th scope="col">Type</th>
-                                                        <th scope="col">Ticker</th>
+                                                        <th scope="col">Symbol</th>
                                                         <th scope="col">Qty</th>
                                                         <th scope="col">Price</th>
                                                         <th scope="col">Total Bought</th>

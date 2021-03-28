@@ -29,3 +29,7 @@ html, body {
 #trade-sort-icon {
     cursor: pointer;
 }
+
+.tradeActionGroup-not-displayed {
+    display: none;
+}
