@@ -713,6 +713,8 @@ function addTradeBtnClicked() {
         $('#quantityInput').removeClass('is-invalid');
         $('#priceInput').removeClass('is-invalid');
 
+        $('#addTradeBtn').removeClass('btn-warning');
+        $('#addTradeBtn').addClass('btn-primary');
         $('#addTradeBtn').html('<i class="bi bi-plus"></i>  Add Trade');
         $('#cancelTradeEditBtn').addClass('cancel-trade-edit-btn-not-displayed');
     }
@@ -732,6 +734,8 @@ function cancelTradeEditBtnClicked() {
     $('#quantityInput').removeClass('is-invalid');
     $('#priceInput').removeClass('is-invalid');
 
+    $('#addTradeBtn').removeClass('btn-warning');
+    $('#addTradeBtn').addClass('btn-primary');
     $('#addTradeBtn').html('<i class="bi bi-plus"></i>  Add Trade');
     $('#cancelTradeEditBtn').addClass('cancel-trade-edit-btn-not-displayed');
 }
@@ -817,8 +821,15 @@ function tradeDoubleClicked(tradeRowElem) {
     $('#optionsButton').prop('checked', !trade.isShares);
     sharesOptionsSelectionChanged();
     $('#tradeDate').val(trade.date);
-    $('#buyButton').prop('checked', trade.buying);
-    $('#sellButton').prop('checked', !trade.buying);
+    if (trade.isShares) {
+        $('#buyButton').prop('checked', trade.buying);
+        $('#sellButton').prop('checked', !trade.buying);
+    } else {
+        $('#btoButton').prop('checked', trade.buying && trade.toOpen);
+        $('#btcButton').prop('checked', trade.buying && !trade.toOpen);
+        $('#stoButton').prop('checked', !trade.buying && trade.toOpen);
+        $('#stcButton').prop('checked', !trade.buying && !trade.toOpen);
+    }
     $('#tickerInput').val(trade.isShares ? trade.ticker : (trade.ticker + ' ' + trade.expiration + ' ' + trade.strike.toString() + (trade.isCall ? 'C' : 'P')));
     $('#quantityInput').val(trade.qty.toString());
     $('#priceInput').val(trade.price.toFixed(4));
@@ -826,6 +837,8 @@ function tradeDoubleClicked(tradeRowElem) {
     $('#quantityInput').removeClass('is-invalid');
     $('#priceInput').removeClass('is-invalid');
 
+    $('#addTradeBtn').removeClass('btn-primary');
+    $('#addTradeBtn').addClass('btn-warning');
     $('#addTradeBtn').html('<i class="bi bi-check"></i>  Save Trade');
     $('#cancelTradeEditBtn').removeClass('cancel-trade-edit-btn-not-displayed');
 }
