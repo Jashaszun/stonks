@@ -699,14 +699,14 @@ function addTradeBtnClicked() {
             editingTradeIndex = undefined;
         }
 
-        $('#tradeDate').val(getTodayDate().toLocaleString().split(',')[0]);
-        $('#buyButton').prop('checked', true);
-        $('#sellButton').prop('checked', false);
-        $('#btoButton').prop('checked', true);
-        $('#btcButton').prop('checked', false);
-        $('#stoButton').prop('checked', false);
-        $('#stcButton').prop('checked', false);
-        $('#tickerInput').val('');
+        // $('#tradeDate').val(getTodayDate().toLocaleString().split(',')[0]);
+        // $('#buyButton').prop('checked', true);
+        // $('#sellButton').prop('checked', false);
+        // $('#btoButton').prop('checked', true);
+        // $('#btcButton').prop('checked', false);
+        // $('#stoButton').prop('checked', false);
+        // $('#stcButton').prop('checked', false);
+        // $('#tickerInput').val('');
         $('#quantityInput').val('');
         $('#priceInput').val('');
         $('#tickerInput').removeClass('is-invalid');
@@ -718,10 +718,14 @@ function addTradeBtnClicked() {
     }
 }
 function cancelTradeEditBtnClicked() {
-    $('#tradeDate').val(getTodayDate().toLocaleString().split(',')[0]);
-    $('#buyButton').prop('checked', true);
-    $('#sellButton').prop('checked', false);
-    $('#tickerInput').val('');
+    // $('#tradeDate').val(getTodayDate().toLocaleString().split(',')[0]);
+    // $('#buyButton').prop('checked', true);
+    // $('#sellButton').prop('checked', false);
+    // $('#btoButton').prop('checked', true);
+    // $('#btcButton').prop('checked', false);
+    // $('#stoButton').prop('checked', false);
+    // $('#stcButton').prop('checked', false);
+    // $('#tickerInput').val('');
     $('#quantityInput').val('');
     $('#priceInput').val('');
     $('#tickerInput').removeClass('is-invalid');
