@@ -635,7 +635,12 @@ function addTradeBtnClicked() {
 
     var isShares = $('#sharesButton').is(':checked');
     var date = $('#tradeDate').val();
-    var buying = $('#buyButton').is(':checked');
+    var buying;
+    if (isShares) {
+        buying = $('#buyButton').is(':checked');
+    } else {
+        buying = $('#btoButton').is(':checked') || $('#btcButton').is(':checked');
+    }
     var ticker = $('#tickerInput').val();
     var qty = $('#quantityInput').val();
     var price = $('#priceInput').val();
@@ -674,6 +679,7 @@ function addTradeBtnClicked() {
             price: parseFloat(price)
         };
         if (!isShares) {
+            trade.toOpen = $('#btoButton').is(':checked') || $('#stoButton').is(':checked');
             var regexGroups = optionRegex.exec(ticker);
             trade.ticker = regexGroups[1];
             trade.expiration = regexGroups[2];
@@ -696,6 +702,10 @@ function addTradeBtnClicked() {
         $('#tradeDate').val(getTodayDate().toLocaleString().split(',')[0]);
         $('#buyButton').prop('checked', true);
         $('#sellButton').prop('checked', false);
+        $('#btoButton').prop('checked', true);
+        $('#btcButton').prop('checked', false);
+        $('#stoButton').prop('checked', false);
+        $('#stcButton').prop('checked', false);
         $('#tickerInput').val('');
         $('#quantityInput').val('');
         $('#priceInput').val('');
@@ -936,7 +946,7 @@ function getTradeStats() {
                 pl = 0;
                 var closedLots = stat.lots[option].splice(0, trade.qty);
                 for (var l in closedLots) {
-                    pl += trade.price - closedLots[l];
+                    pl += trade.price/* - closedLots[l]*/;
                 }
                 pl *= 100;
                 if (trade.buying) {
