@@ -740,8 +740,17 @@ function addTrade(trade, addingBulk) {
         '    <td>' + getPriceText(trade.price) + '</td>' +
         '    <td><button type="button" class="btn-close" onclick="removeTradeBtnClicked(this)"></button></td>' +
         '</tr>';
-    var rowIndex = tradeSortAscending ? index : (trades.length - 1 - index);
-    $('#trades-table tbody').insertIndex(newRow, rowIndex);
+    if (addingBulk) {
+        // If adding in bulk, trades are already sorted when coming to this function
+        if (tradeSortAscending) {
+            $('#trades-table tbody').append(newRow);
+        } else {
+            $('#trades-table tbody').prepend(newRow);
+        }
+    } else {
+        var rowIndex = tradeSortAscending ? index : (trades.length - 1 - index);
+        $('#trades-table tbody').insertIndex(newRow, rowIndex);
+    }
 
     if (!addingBulk) {
         updateStats();
