@@ -1,3 +1,11 @@
+$.fn.insertIndex = function(html, i) {
+    if (i < $(this).children().length) {
+        $(this).children().eq(i).before(html);
+    } else {
+        $(this).append(html);
+    }
+    return this;
+};
 function getPriceText(price) {
     if (price === undefined) {
         return '-';
@@ -22,6 +30,9 @@ function getTodayDate() {
 }
 function getOptionStr(trade, includeTicker = true) {
     return (includeTicker ? trade.ticker + ' ' : '') + trade.expiration + ' ' + trade.strike.toString() + (trade.isCall ? 'C' : 'P');
+}
+function getDateStr(date) {
+    return (date.getMonth()+1).toString() + '/' + date.getDate().toString() + '/' + date.getFullYear().toString();
 }
 
 function storageAvailable(type) {
@@ -83,6 +94,8 @@ window.onload = function(e) {
         updateTradeSorting();
         if (window.localStorage.getItem("trades")) {
             trades = JSON.parse(window.localStorage.getItem("trades"));
+            trades.sort(function (a, b) { return new Date(a.date).getTime() - new Date(b.date).getTime() });
+            // sort is stable so same-day trades are still in the same order
             for (var i in trades) {
                 if (!('isShares' in trades[i])) {
                     trades[i].isShares = true;
@@ -156,28 +169,8 @@ function updateGraphs() {
         function getStockPrices(priceRequests) {
             if (priceRequests.length > 0) {
                 var request = priceRequests[0];
-                // var startDateStr = request.startDate.getFullYear().toString() + '-' + 
-                //     (request.startDate.getMonth()+1).toString().padStart(2, '0') + '-' + 
-                //     request.startDate.getDate().toString().padStart(2, '0');
-                // var endDateStr = request.endDate.getFullYear().toString() + '-' + 
-                //     (request.endDate.getMonth()+1).toString().padStart(2, '0') + '-' + 
-                //     request.endDate.getDate().toString().padStart(2, '0');
-                // $.getJSON("https://api.polygon.io/v2/aggs/ticker/" + request.ticker + "/range/1/day/" + startDateStr + "/" + endDateStr +
-                //     "?unadjusted=false&sort=asc&limit=50000&apiKey=UnHyngIUP8cW5jGX17pCpjWipUPDzPr9", function(data) {
                 $.getJSON("http://73.254.230.39:8123/ticker/" + request.ticker, function(data) {
                     console.log("Got historical data for " + request.ticker);
-                    // for (var i in data.results) {
-                    //     // The times are given at 9pm the night before (???), so add 19 hours to get to 4pm of the correct day.
-                    //     data.results[i].t += 19 * 60 * 60 * 1000;
-                    //     data.results[i].date = new Date(data.results[i].t);
-                    //     data.results[i].date = new Date(data.results[i].date.getFullYear(), data.results[i].date.getMonth(), data.results[i].date.getDate());
-                    // }
-                    // var storedPrices = {
-                    //     startDate: request.startDate,
-                    //     endDate: request.endDate,
-                    //     prices: data.results
-                    // };
-                    // stockPrices[request.ticker] = storedPrices;
                     stockPrices[request.ticker] = data.data;
                     window.localStorage.setItem("stockPrices", JSON.stringify(stockPrices));
                     
@@ -207,10 +200,6 @@ function updateGraphs() {
 function getGraphData(tickerDateRanges) {
     var tickers = Object.keys(stockPrices);
     tickers.sort();
-
-    var sortedTrades = trades.slice();
-    sortedTrades.sort(function (a, b) { return new Date(a.date).getTime() - new Date(b.date).getTime() });
-    // sort is stable so same-day trades are still in the same order
 
     var data = {};
     var allData = {
@@ -274,8 +263,8 @@ function getGraphData(tickerDateRanges) {
             }
         }
         var tradesOnDay = [];
-        while (tradeIndex < sortedTrades.length && new Date(sortedTrades[tradeIndex].date).getTime() === date.getTime()) {
-            tradesOnDay.push(sortedTrades[tradeIndex]);
+        while (tradeIndex < trades.length && new Date(trades[tradeIndex].date).getTime() === date.getTime()) {
+            tradesOnDay.push(trades[tradeIndex]);
             tradeIndex++;
         }
 
@@ -699,14 +688,6 @@ function addTradeBtnClicked() {
             editingTradeIndex = undefined;
         }
 
-        // $('#tradeDate').val(getTodayDate().toLocaleString().split(',')[0]);
-        // $('#buyButton').prop('checked', true);
-        // $('#sellButton').prop('checked', false);
-        // $('#btoButton').prop('checked', true);
-        // $('#btcButton').prop('checked', false);
-        // $('#stoButton').prop('checked', false);
-        // $('#stcButton').prop('checked', false);
-        // $('#tickerInput').val('');
         $('#quantityInput').val('');
         $('#priceInput').val('');
         $('#tickerInput').removeClass('is-invalid');
@@ -720,14 +701,6 @@ function addTradeBtnClicked() {
     }
 }
 function cancelTradeEditBtnClicked() {
-    // $('#tradeDate').val(getTodayDate().toLocaleString().split(',')[0]);
-    // $('#buyButton').prop('checked', true);
-    // $('#sellButton').prop('checked', false);
-    // $('#btoButton').prop('checked', true);
-    // $('#btcButton').prop('checked', false);
-    // $('#stoButton').prop('checked', false);
-    // $('#stcButton').prop('checked', false);
-    // $('#tickerInput').val('');
     $('#quantityInput').val('');
     $('#priceInput').val('');
     $('#tickerInput').removeClass('is-invalid');
@@ -749,13 +722,17 @@ function removeTradeBtnClicked(removeBtn) {
 
 var tradeSortAscending = false;
 function addTrade(trade, addingBulk) {
+    var index = 0;
+    var newTradeDateTime = new Date(trade.date).getTime();
+    while (index < trades.length && new Date(trades[index].date).getTime() <= newTradeDateTime) {
+        index++;
+    }
     if (!addingBulk) {
-        trades.push(trade);
+        trades.splice(index, 0, trade);
         saveTrades();
     }
-
     var newRow = 
-        '<tr class="trade-table-tr trade-table-' + (trade.buying ? 'buy' : 'sell') + '-tr" ondblclick="tradeDoubleClicked(this)">' +
+        '<tr class="trade-table-tr trade-table-' + (((trade.isShares && trade.buying) || (!trade.isShares && trade.toOpen)) ? 'buy' : 'sell') + '-tr" ondblclick="tradeDoubleClicked(this)">' +
         '    <td>' + trade.date + '</td>' +
         '    <td>' + (trade.isShares ? (trade.buying ? 'Buy' : 'Sell') : ((trade.buying ? 'B' : 'S') + 'T' + (trade.toOpen ? 'O' : 'C'))) + '</td>' +
         '    <td>' + (trade.isShares ? trade.ticker : (trade.ticker + ' ' + trade.expiration + '<br/>' + trade.strike.toString() + (trade.isCall ? 'C' : 'P'))) + '</td>' +
@@ -763,42 +740,27 @@ function addTrade(trade, addingBulk) {
         '    <td>' + getPriceText(trade.price) + '</td>' +
         '    <td><button type="button" class="btn-close" onclick="removeTradeBtnClicked(this)"></button></td>' +
         '</tr>';
-    if (tradeSortAscending) {
-        $('#trades-table tbody').append(newRow);
-    } else {
-        $('#trades-table tbody').prepend(newRow);
-    }
+    var rowIndex = tradeSortAscending ? index : (trades.length - 1 - index);
+    $('#trades-table tbody').insertIndex(newRow, rowIndex);
 
     if (!addingBulk) {
         updateStats();
     }
 }
 function updateTrade(index, newTrade) {
-    trades[index] = newTrade;
-    saveTrades();
-
-    var rowIndex = tradeSortAscending ? index : (trades.length - 1 - index);
-    $('#trades-table tbody').find('tr').eq(rowIndex).replaceWith(
-        '<tr class="trade-table-tr trade-table-' + (newTrade.buying ? 'buy' : 'sell') + '-tr" ondblclick="tradeDoubleClicked(this)">' +
-        '    <td>' + newTrade.date + '</td>' +
-        '    <td>' + (newTrade.isShares ? (newTrade.buying ? 'Buy' : 'Sell') : ((newTrade.buying ? 'B' : 'S') + 'T' + (newTrade.toOpen ? 'O' : 'C'))) + '</td>' +
-        '    <td>' + (newTrade.isShares ? newTrade.ticker : (newTrade.ticker + ' ' + newTrade.expiration + '<br/>' + newTrade.strike.toString() + (newTrade.isCall ? 'C' : 'P'))) + '</td>' +
-        '    <td>' + newTrade.qty.toString() + '</td>' +
-        '    <td>' + getPriceText(newTrade.price) + '</td>' +
-        '    <td><button type="button" class="btn-close" onclick="removeTradeBtnClicked(this)"></button></td>' +
-        '</tr>'
-    );
-
-    updateStats();
+    removeTrade(index, true);
+    addTrade(newTrade, false);
 }
-function removeTrade(index) {
+function removeTrade(index, updatingTrade = false) {
     var rowIndex = tradeSortAscending ? index : (trades.length - 1 - index);
     $('#trades-table tbody').find('tr').eq(rowIndex).remove();
 
     trades.splice(index, 1);
     saveTrades();
 
-    updateStats();
+    if (!updatingTrade) {
+        updateStats();
+    }
 }
 function tradeDoubleClicked(tradeRowElem) {
     function clearSelection() {
@@ -946,24 +908,17 @@ function getTradeStats() {
             // If STO or BTC, it's a Short option (you sold it)
             var option = (trade.buying === trade.toOpen ? 'Long ' : 'Short ') + getOptionStr(trade, false);
             if (trade.toOpen) {
+                pl = undefined;
                 if (!(option in stat.lots)) {
                     stat.lots[option] = [];
                 }
                 stat.lots[option] = stat.lots[option].concat(new Array(trade.qty).fill(trade.price));
-
-                if (trade.buying) {
-                    // BTO
-                    pl = -trade.qty * trade.price * 100;
-                } else {
-                    // STO
-                    pl = trade.qty * trade.price * 100;
-                }
             } else {
                 // Closing
                 pl = 0;
                 var closedLots = stat.lots[option].splice(0, trade.qty);
                 for (var l in closedLots) {
-                    pl += trade.price/* - closedLots[l]*/;
+                    pl += trade.price - closedLots[l];
                 }
                 pl *= 100;
                 if (trade.buying) {
@@ -991,6 +946,131 @@ function getTradeStats() {
         prevTradesByTicker[trade.ticker] = stat;
         prevAllTrade = allStat;
     }
+    // Now we need to check any open option positions for expiry
+    // We need to find all of expired options, then sort by expiration date > ticker > long/short > call/put > strike
+    // So that the "all" table is in the correct order
+    var currentDateTime = new Date();
+    var tickers = Object.keys(stats);
+    tickers.sort();
+    var expiredOptions = [];
+    for (var i in tickers) {
+        var ticker = tickers[i];
+        var prevStockTrade = stats[ticker][stats[ticker].length - 1];
+        for (var position in prevStockTrade.lots) {
+            if (position !== 'shares' && prevStockTrade.lots[position].length > 0) {
+                // Open option position
+                var longOption = position.split(' ')[0] === 'Long';
+                var expDateStr = position.split(' ')[1]; // E.g. "Long 4/16/21 300C" => "4/16/21"
+                var strike = position.split(' ')[2];
+                var isCall = strike[strike.length - 1] === 'C';
+                strike = parseFloat(strike.substr(0, strike.length-1));
+
+                var expiration = new Date("13:00:00 " + expDateStr);
+                if (currentDateTime.getTime() >= expiration.getTime()) {
+                    expiredOptions.push({
+                        position: position,
+                        ticker: ticker,
+                        longOption: longOption,
+                        expDateStr: expDateStr,
+                        expiration: expiration,
+                        strike: strike,
+                        isCall: isCall
+                    });
+                }
+            }
+        }
+    }
+    // Sort by increasing strike
+    expiredOptions.sort(function (a, b) { return a.strike - b.strike });
+    // Then by call/put, calls first
+    expiredOptions.sort(function (a, b) { if (a.isCall == b.isCall) { return 0; } else { return a.isCall ? -1 : 1 } });
+    // Then by long/short, long first
+    expiredOptions.sort(function (a, b) { if (a.longOption == b.longOption) { return 0; } else { return a.longOption ? -1 : 1 } });
+    // Then by ticker
+    expiredOptions.sort(function (a, b) { return a.ticker.localeCompare(b.ticker); });
+    // Then by expiration date
+    expiredOptions.sort(function (a, b) { return a.expiration.getTime() - b.expiration.getTime(); });
+
+    for (var i in expiredOptions) {
+        var position = expiredOptions[i].position;
+        var ticker = expiredOptions[i].ticker;
+        var longOption = expiredOptions[i].longOption;
+        var expDateStr = expiredOptions[i].expDateStr;
+        var strike = expiredOptions[i].strike;
+        var isCall = expiredOptions[i].isCall;
+        var prevStockTrade = stats[ticker][stats[ticker].length - 1];
+
+        // Add a trade for this ticker, and in the overall stats
+        var stat = {
+            date: getDateStr(new Date(expDateStr)),
+            isShares: false,
+            buying: !longOption, // If long, it was BTO/STC, so the close is a Sell
+            toOpen: false,
+            expiration: expDateStr,
+            strike: strike,
+            isCall: isCall,
+            isExpired: true,
+            ticker: ticker,
+            qty: prevStockTrade.lots[position].length,
+            price: 0,
+            stockBought: prevStockTrade.stockBought,
+            stockSold: prevStockTrade.stockSold,
+            totalBought: prevAllTrade.totalBought,
+            totalSold: prevAllTrade.totalSold,
+            lots: {}
+        };
+        var allStat = {
+            date: getDateStr(new Date(expDateStr)),
+            isShares: false,
+            buying: !longOption,
+            toOpen: false,
+            expiration: expDateStr,
+            strike: strike,
+            isCall: isCall,
+            isExpired: true,
+            qty: prevStockTrade.lots[position].length,
+            price: 0,
+            totalBought: prevAllTrade.totalBought,
+            totalSold: prevAllTrade.totalSold,
+        };
+        stat.symbol = allStat.symbol = getOptionStr(stat);
+        var prevLotKeys = Object.keys(prevStockTrade.lots);
+        for (var key in prevLotKeys) {
+            stat.lots[prevLotKeys[key]] = prevStockTrade.lots[prevLotKeys[key]].slice();
+        }
+
+        var pl = 0;
+        var expiredLots = stat.lots[position];
+        stat.lots[position] = [];
+        for (var l in expiredLots) {
+            pl -= expiredLots[l];
+        }
+        pl *= 100;
+        if (!longOption) {
+            pl = -pl; // E.g. STO @ 5, BTC @ 1 = 4 profit
+        }
+
+        stat.pl = pl;
+        stat.plPercent = (stat.pl !== undefined && stat.stockBought > 0) ? (100*stat.pl/stat.stockBought) : undefined;
+        stat.stockPL = (stat.pl === undefined) ? prevStockTrade.stockPL : ((prevStockTrade.stockPL === undefined ? 0 : prevStockTrade.stockPL) + stat.pl);
+        stat.stockPLPercent = (stat.stockPL !== undefined && stat.stockBought > 0) ? (100*stat.stockPL/stat.stockBought) : undefined;
+        stat.totalPL = (stat.pl === undefined) ? prevStockTrade.totalPL : ((prevStockTrade.totalPL === undefined ? 0 : prevStockTrade.totalPL) + stat.pl);
+        stat.totalPLPercent = (stat.totalPL !== undefined && stat.totalBought > 0) ? (100*stat.totalPL/stat.totalBought) : undefined;
+
+        allStat.pl = pl;
+        allStat.plPercent = (allStat.pl !== undefined && allStat.totalBought > 0) ? (100*allStat.pl/allStat.totalBought) : undefined;
+        allStat.totalPL = (allStat.pl === undefined) ? prevAllTrade.totalPL : ((prevAllTrade.totalPL === undefined ? 0 : prevAllTrade.totalPL) + allStat.pl);
+        allStat.totalPLPercent = (allStat.totalPL !== undefined && allStat.totalBought > 0) ? (100*allStat.totalPL/allStat.totalBought) : undefined;
+
+        stat.breakevenPerShare = stat.lots.shares.length > 0 ? ((stat.stockBought - stat.stockSold) / stat.lots.shares.length) : undefined;
+
+        stats[ticker].push(stat);
+        allStats.push(allStat);
+
+        prevTradesByTicker[ticker] = stat;
+        prevAllTrade = allStat;
+    }
+    
     stats.all = allStats;
     return stats;
 }
@@ -1074,10 +1154,10 @@ function updateStats() {
         $('#trades-stats-all-table tbody').append(
             '<tr' + (trade.pl > 0 ? ' class="trade-table-profit-tr"' : (trade.pl < 0 ? ' class="trade-table-loss-tr"' : '')) + '>' +
             '    <td>' + trade.date + '</td>' +
-            '    <td>' + (trade.isShares ? (trade.buying ? 'Buy' : 'Sell') : ((trade.buying ? 'B' : 'S') + 'T' + (trade.toOpen ? 'O' : 'C'))) + '</td>' +
+            '    <td>' + (trade.isExpired ? 'EXP' : (trade.isShares ? (trade.buying ? 'Buy' : 'Sell') : ((trade.buying ? 'B' : 'S') + 'T' + (trade.toOpen ? 'O' : 'C')))) + '</td>' +
             '    <td>' + trade.symbol + '</td>' +
             '    <td>' + trade.qty.toString() + '</td>' +
-            '    <td>' + getPriceText(trade.price) + '</td>' +
+            '    <td>' + getPriceText(trade.isExpired ? undefined : trade.price) + '</td>' +
             '    <td>' + getPriceText(trade.totalBought) + '</td>' +
             '    <td>' + getPriceText(trade.totalSold) + '</td>' +
             '    <td>' + getPriceText(trade.pl) + '</td>' +
@@ -1094,10 +1174,10 @@ function updateStats() {
             $('#trades-stats-' + ticker + '-table tbody').append(
                 '<tr' + (trade.pl > 0 ? ' class="trade-table-profit-tr"' : (trade.pl < 0 ? ' class="trade-table-loss-tr"' : '')) + '>' +
                 '    <td>' + trade.date + '</td>' +
-                '    <td>' + (trade.isShares ? (trade.buying ? 'Buy' : 'Sell') : ((trade.buying ? 'B' : 'S') + 'T' + (trade.toOpen ? 'O' : 'C'))) + '</td>' +
+                '    <td>' + (trade.isExpired ? 'EXP' : (trade.isShares ? (trade.buying ? 'Buy' : 'Sell') : ((trade.buying ? 'B' : 'S') + 'T' + (trade.toOpen ? 'O' : 'C')))) + '</td>' +
                 '    <td>' + trade.symbol + '</td>' +
                 '    <td>' + trade.qty.toString() + '</td>' +
-                '    <td>' + getPriceText(trade.price) + '</td>' +
+                '    <td>' + getPriceText(trade.isExpired ? undefined : trade.price) + '</td>' +
                 '    <td>' + getPriceText(trade.stockBought) + '</td>' +
                 '    <td>' + getPriceText(trade.stockSold) + '</td>' +
                 '    <td>' + trade.lots.shares.length.toString() + '</td>' +
