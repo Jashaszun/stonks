@@ -757,8 +757,25 @@ function addTrade(trade, addingBulk) {
     }
 }
 function updateTrade(index, newTrade) {
-    removeTrade(index, true);
-    addTrade(newTrade, false);
+    if (trades[index].date !== newTrade.date) {
+        removeTrade(index, true);
+        addTrade(newTrade, false);
+    } else {
+        trades[index] = newTrade;
+        saveTrades();
+        var newRow = 
+            '<tr class="trade-table-tr trade-table-' + (((newTrade.isShares && newTrade.buying) || (!newTrade.isShares && newTrade.toOpen)) ? 'buy' : 'sell') + '-tr" ondblclick="tradeDoubleClicked(this)">' +
+            '    <td>' + newTrade.date + '</td>' +
+            '    <td>' + (newTrade.isShares ? (newTrade.buying ? 'Buy' : 'Sell') : ((newTrade.buying ? 'B' : 'S') + 'T' + (newTrade.toOpen ? 'O' : 'C'))) + '</td>' +
+            '    <td>' + (newTrade.isShares ? newTrade.ticker : (newTrade.ticker + ' ' + newTrade.expiration + '<br/>' + newTrade.strike.toString() + (newTrade.isCall ? 'C' : 'P'))) + '</td>' +
+            '    <td>' + newTrade.qty.toString() + '</td>' +
+            '    <td>' + getPriceText(newTrade.price) + '</td>' +
+            '    <td><button type="button" class="btn-close" onclick="removeTradeBtnClicked(this)"></button></td>' +
+            '</tr>';
+        var rowIndex = tradeSortAscending ? index : (trades.length - 1 - index);
+        $('#trades-table tbody').children().eq(rowIndex).replaceWith(newRow);
+        updateStats();
+    }
 }
 function removeTrade(index, updatingTrade = false) {
     var rowIndex = tradeSortAscending ? index : (trades.length - 1 - index);
