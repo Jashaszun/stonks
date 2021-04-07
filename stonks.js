@@ -1602,8 +1602,8 @@ function computeAndUpdatePositions(latestOptionPrices) {
             position[option].totalPL = position[option].realizedPL + position[option].unrealizedPL;
             position[option].totalPLPercent = position[option].totalPL / bought[option] * 100;
             // If this is a closed option, we won't have greeks for it
-            position[option].delta = (optionPrices && option in optionPrices) ? (optionPrices[option].delta * 100) : NaN;
-            position[option].theta = (optionPrices && option in optionPrices) ? (optionPrices[option].theta * 100) : NaN;
+            position[option].delta = (optionPrices && option in optionPrices) ? (optionPrices[option].delta * 100 * position[option].qty) : NaN;
+            position[option].theta = (optionPrices && option in optionPrices) ? (optionPrices[option].theta * 100 * position[option].qty) : NaN;
 
             position.total.totalValue += position[option].totalValue;
             position.total.unrealizedPL += position[option].unrealizedPL;
