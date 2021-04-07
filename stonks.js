@@ -1551,7 +1551,7 @@ function computeAndUpdatePositions(latestOptionPrices) {
 
         // Total: +totalValue, realizedPL, +unrealizedPL, +totalPL, +totalPLPercent, +delta, +theta
         // Shares, Options: qty, +breakeven, +marketPrice, +totalValue, realizedPL, +unrealizedPL, +totalPL, +totalPLPercent, +delta, +theta (not for shares)
-        if ('shares' in position && position.shares.qty > 0) {
+        if ('shares' in position/* && position.shares.qty > 0*/) {
             position.shares.breakeven = (bought.shares - sold.shares) / position.shares.qty;
             position.shares.marketPrice = latestSharePrice;
             position.shares.totalValue = position.shares.marketPrice * position.shares.qty;
@@ -1569,12 +1569,13 @@ function computeAndUpdatePositions(latestOptionPrices) {
             position.total.delta += position.shares.delta;
         }
         for (var option in position) {
-            if (option === 'total' || option === 'shares' || position[option].qty === 0) {
+            if (option === 'total' || option === 'shares'/* || position[option].qty === 0*/) {
                 continue;
             }
 
             position[option].breakeven = (bought[option] - sold[option]) / position[option].qty;
-            position[option].marketPrice = (option.startsWith("Long") ? optionPrices[option].latestBid : optionPrices[option].latestAsk);
+            // If this is a closed option, we won't have a price for it
+            position[option].marketPrice = (optionPrices && option in optionPrices) ? ((option.startsWith("Long") ? optionPrices[option].latestBid : optionPrices[option].latestAsk)) : NaN;
             position[option].totalValue = position[option].marketPrice * position[option].qty * 100;
             position[option].unrealizedPL = 0;
             for (var i in tickerLots[option]) {
@@ -1582,8 +1583,9 @@ function computeAndUpdatePositions(latestOptionPrices) {
             }
             position[option].totalPL = position[option].realizedPL + position[option].unrealizedPL;
             position[option].totalPLPercent = position[option].totalPL / bought[option] * 100;
-            position[option].delta = optionPrices[option].delta * 100;
-            position[option].theta = optionPrices[option].theta * 100;
+            // If this is a closed option, we won't have greeks for it
+            position[option].delta = (optionPrices && option in optionPrices) ? (optionPrices[option].delta * 100) : NaN;
+            position[option].theta = (optionPrices && option in optionPrices) ? (optionPrices[option].theta * 100) : NaN;
 
             position.total.totalValue += position[option].totalValue;
             position.total.unrealizedPL += position[option].unrealizedPL;
@@ -1606,6 +1608,23 @@ function computeAndUpdatePositions(latestOptionPrices) {
 
         position.total.breakeven = ('shares' in position && position.shares.qty > 0) ? ((bought.total - sold.total) / position.shares.qty) : undefined;
         position.total.totalPLPercent = position.total.totalPL / bought.total * 100;
+    }
+
+    var openPositions = {};
+    var closedPositions = {};
+    for (var ticker in positions) {
+        var isOpen = false;
+        for (var security in positions[ticker]) {
+            if (security !== 'total' && positions[ticker][security].qty > 0) {
+                isOpen = true;
+                break;
+            }
+        }
+        if (isOpen) {
+            openPositions[ticker] = positions[ticker];
+        } else {
+            closedPositions[ticker] = positions[ticker];
+        }
     }
 }
 function updatePositionsTable(latestStats, openOptions) {
