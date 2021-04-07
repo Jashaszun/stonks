@@ -479,6 +479,9 @@ function updateStockGraphs(tickerDateRanges) {
         }
     }
     chartTypeSelectionClicked(); // Act as if a button was pressed, to update all graphs
+
+    // Now that we have stock prices, we can update positions as well
+    processPositions();
 }
 var graphsAreOHLC = true;
 function chartTypeSelectionClicked() {
@@ -1179,9 +1182,9 @@ function updateStats() {
         var trade = stats.all[i];
         $('#trades-stats-all-table tbody').append(
             '<tr' + (trade.pl > 0 ? ' class="trade-table-profit-tr"' : (trade.pl < 0 ? ' class="trade-table-loss-tr"' : '')) + '>' +
-            '    <td>' + trade.date + '</td>' +
-            '    <td>' + (trade.isExpired ? 'EXP' : (trade.isShares ? (trade.buying ? 'Buy' : 'Sell') : ((trade.buying ? 'B' : 'S') + 'T' + (trade.toOpen ? 'O' : 'C')))) + '</td>' +
-            '    <td>' + trade.symbol + '</td>' +
+            '    <th scope="row">' + trade.date + '</th>' +
+            '    <th scope="row">' + (trade.isExpired ? 'EXP' : (trade.isShares ? (trade.buying ? 'Buy' : 'Sell') : ((trade.buying ? 'B' : 'S') + 'T' + (trade.toOpen ? 'O' : 'C')))) + '</th>' +
+            '    <th scope="row">' + trade.symbol + '</th>' +
             '    <td>' + trade.qty.toString() + '</td>' +
             '    <td>' + getPriceText(trade.isExpired ? undefined : trade.price) + '</td>' +
             '    <td>' + getPriceText(trade.totalBought) + '</td>' +
@@ -1199,9 +1202,9 @@ function updateStats() {
             var trade = stats[ticker][j];
             $('#trades-stats-' + ticker + '-table tbody').append(
                 '<tr' + (trade.pl > 0 ? ' class="trade-table-profit-tr"' : (trade.pl < 0 ? ' class="trade-table-loss-tr"' : '')) + '>' +
-                '    <td>' + trade.date + '</td>' +
-                '    <td>' + (trade.isExpired ? 'EXP' : (trade.isShares ? (trade.buying ? 'Buy' : 'Sell') : ((trade.buying ? 'B' : 'S') + 'T' + (trade.toOpen ? 'O' : 'C')))) + '</td>' +
-                '    <td>' + trade.symbol + '</td>' +
+                '    <th scope="row">' + trade.date + '</th>' +
+                '    <th scope="row">' + (trade.isExpired ? 'EXP' : (trade.isShares ? (trade.buying ? 'Buy' : 'Sell') : ((trade.buying ? 'B' : 'S') + 'T' + (trade.toOpen ? 'O' : 'C')))) + '</th>' +
+                '    <th scope="row">' + trade.symbol + '</th>' +
                 '    <td>' + trade.qty.toString() + '</td>' +
                 '    <td>' + getPriceText(trade.isExpired ? undefined : trade.price) + '</td>' +
                 '    <td>' + getPriceText(trade.stockBought) + '</td>' +
@@ -1261,5 +1264,646 @@ function sharesOptionsSelectionChanged() {
     } else {
         $('#buySellGroup-options').removeClass('tradeActionGroup-not-displayed');
         $('#buySellGroup-shares').addClass('tradeActionGroup-not-displayed');
+    }
+}
+
+function processPositions() {
+    // The plan is to get a list of all open options, get their prices, and then finally compute all data for positions
+
+    // Get open options
+    var openOptions = getOpenOptions();
+
+    // Get prices
+    function getOptionData(tickers) {
+        if (tickers.length > 0) {
+            var ticker = tickers[0];
+            $.getJSON("/options/" + ticker, function(data) {
+                console.log("Got options data for " + ticker);
+                processOptionsData(data);
+
+                for (var position in openOptions[ticker]) {
+                    var expDate = new Date(position.split(' ')[2]);
+                    expDate = (expDate.getFullYear()-2000).toString().padStart(2, '0') + (expDate.getMonth()+1).toString().padStart(2, '0') + expDate.getDate().toString().padStart(2, '0');
+                    
+                    var strike = position.split(' ')[3];
+                    var isCall = strike[strike.length-1] === 'C';
+                    strike = strike.substr(0, strike.length - 1);
+
+                    var optionData = isCall ? data.options[expDate][strike].c : data.options[expDate][strike].p;
+                    openOptions[ticker][position].latestAsk = optionData.ask;
+                    openOptions[ticker][position].latestBid = optionData.bid;
+                    openOptions[ticker][position].delta = optionData.greeks.delta;
+                    openOptions[ticker][position].theta = optionData.greeks.theta;
+                }
+                
+                // Start on the rest of the requests
+                getOptionData(tickers.slice(1));
+            }).fail(function() {
+                setTimeout(function() {
+                    getOptionData(tickers);
+                }, 2*1000); // Wait a couple seconds to request the data.
+            });
+        } else {
+            // We got all the data we need!
+            computeAndUpdatePositions(openOptions);
+        }
+    };
+    if (Object.keys(openOptions).length > 0) {
+        // Need more options data
+        getOptionData(Object.keys(openOptions));
+    } else {
+        // There are no open options!
+        computeAndUpdatePositions({});
+    }
+}
+function getOpenOptions() {
+    var positions = {};
+    for (var i in trades) {
+        var trade = trades[i];
+        var ticker = trade.ticker;
+        if (!(ticker in positions)) {
+            positions[ticker] = { shares: 0 };
+        }
+        if (trade.isShares) {
+            positions[ticker].shares = trade.buying ? (positions[ticker].shares + trade.qty) : (positions[ticker].shares - trade.qty);
+        } else {
+            // If BTO or STC, it's a Long option (you bought it)
+            // If STO or BTC, it's a Short option (you sold it)
+            var option = (trade.buying === trade.toOpen ? 'Long ' : 'Short ') + getOptionStr(trade);
+            if (!(option in positions[ticker])) {
+                positions[ticker][option] = 0;
+            }
+            positions[ticker][option] = trade.toOpen ? (positions[ticker][option] + trade.qty) : (positions[ticker][option] - trade.qty);
+        }
+    }
+
+    var openOptions = {};
+    for (var ticker in positions) {
+        for (var position in positions[ticker]) {
+            if (position !== 'shares' && positions[ticker][position] > 0) {
+                if (!(ticker in openOptions)) {
+                    openOptions[ticker] = {};
+                }
+                openOptions[ticker][position] = { latestAsk: undefined, latestBid: undefined, delta: undefined, theta: undefined };
+            }
+        }
+    }
+    return openOptions;
+}
+function computeAndUpdatePositions(latestOptionPrices) {
+    // Per position:
+    // Symbol | Qty | Breakeven | Market Price | Total Value | Realized P/L | Unrealized P/L | Total P/L | % of Ticker Bought | Delta | Theta
+    var latestSharePrices = {};
+    var positions = {};
+    var openOptions = []; // Running list of open options with expiration dates
+    var lots = {};
+    var tickerBought = {};
+    var tickerSold = {};
+
+    var tradesWithExp = trades.slice();
+    var lastProcessedTradeDate = new Date(tradesWithExp[0].date);
+    for (var i = 0; i < tradesWithExp.length; i++) {
+        if (new Date(tradesWithExp[i].date).getTime() > lastProcessedTradeDate.getTime()) {
+            // Next trade is on a later date, so check for expirations in between last trade and this one
+            for (var j in openOptions) {
+                var expiration = new Date(openOptions[j].expiration);
+                if (expiration.getTime() >= lastProcessedTradeDate.getTime() && expiration.getTime() < new Date(tradesWithExp[i].date).getTime()) {
+                    // Expire it
+                    var option = openOptions[j];
+                    var expTrade = {
+                        isShares: false,
+                        date: option.expiration,
+                        buying: !option.isLong,
+                        toOpen: false,
+                        ticker: option.ticker,
+                        expiration: option.expiration,
+                        strike: option.strike,
+                        isCall: option.isCall,
+                        qty: option.qty,
+                        price: 0,
+                    };
+                    tradesWithExp.splice(i, 0, expDate);
+                }
+            }
+        }
+
+        var trade = tradesWithExp[i];
+        var ticker = trade.ticker;
+        // Get the starting data in if we haven't seen this ticker/position before
+        if (!(ticker in positions)) {
+            latestSharePrices[ticker] = stockPrices[ticker].prices[stockPrices[ticker].prices.length - 1].c;
+            positions[ticker] = {
+                total: {
+                    symbol: ticker,
+                    qty: undefined,
+                    breakeven: undefined,
+                    marketPrice: undefined,
+                    totalValue: 0,
+                    realizedPL: 0,
+                    unrealizedPL: 0,
+                    totalPL: 0,
+                    totalPLPercent: 0,
+                    delta: 0,
+                    theta: 0
+                }
+            };
+            lots[ticker] = { };
+            tickerBought[ticker] = { total: 0 };
+            tickerSold[ticker] = { total: 0 };
+        }
+        if (trade.isShares) {
+            if (!('shares' in positions[ticker])) {
+                positions[ticker].shares = {
+                    symbol: ticker,
+                    qty: 0,
+                    breakeven: 0,
+                    marketPrice: 0,
+                    totalValue: 0,
+                    realizedPL: 0,
+                    unrealizedPL: 0,
+                    totalPL: 0,
+                    totalPLPercent: 0,
+                    delta: 0,
+                    theta: undefined
+                };
+                lots[ticker].shares = [];
+                tickerBought[ticker].shares = 0;
+                tickerSold[ticker].shares = 0;
+            }
+        } else {
+            var option = (trade.buying === trade.toOpen ? 'Long ' : 'Short ') + getOptionStr(trade);
+            if (!(option in positions[ticker])) {
+                positions[ticker][option] = {
+                    symbol: option,
+                    qty: 0,
+                    breakeven: 0,
+                    marketPrice: 0,
+                    totalValue: 0,
+                    realizedPL: 0,
+                    unrealizedPL: 0,
+                    totalPL: 0,
+                    totalPLPercent: 0,
+                    delta: 0,
+                    theta: 0
+                };
+                lots[ticker][option] = [];
+                tickerBought[ticker][option] = 0;
+                tickerSold[ticker][option] = 0;
+            }
+        }
+
+        // And now start processing the trade
+        if (trade.isShares) {
+            if (trade.buying) {
+                lots[ticker].shares = lots[ticker].shares.concat(new Array(trade.qty).fill(trade.price));
+                tickerBought[ticker].total += trade.qty * trade.price;
+                tickerBought[ticker].shares += trade.qty * trade.price;
+
+                positions[ticker].shares.qty += trade.qty;
+            } else {
+                tickerSold[ticker].total += trade.qty * trade.price;
+                tickerSold[ticker].shares += trade.qty * trade.price;
+                var pl = 0;
+                var soldLots = lots[ticker].shares.splice(0, trade.qty);
+                for (var l in soldLots) {
+                    pl += trade.price - soldLots[l];
+                }
+
+                positions[ticker].shares.qty -= trade.qty;
+                positions[ticker].total.realizedPL += pl;
+                positions[ticker].shares.realizedPL += pl;
+            }
+
+        } else {
+            // Options!
+            // If BTO or STC, it's a Long option (you bought it)
+            // If STO or BTC, it's a Short option (you sold it)
+            var option = (trade.buying === trade.toOpen ? 'Long ' : 'Short ') + getOptionStr(trade);
+            if (trade.buying) {
+                tickerBought[ticker].total += trade.qty * trade.price * 100;
+                tickerBought[ticker][option] += trade.qty * trade.price * 100;
+            } else {
+                tickerSold[ticker].total += trade.qty * trade.price * 100;
+                tickerSold[ticker][option] += trade.qty * trade.price * 100;
+            }
+            if (trade.toOpen) {
+                lots[ticker][option] = lots[ticker][option].concat(new Array(trade.qty).fill(trade.price));
+
+                positions[ticker][option].qty += trade.qty;
+
+                var newOption = {
+                    ticker: ticker,
+                    isLong: trade.buying === trade.toOpen,
+                    expiration: trade.expiration,
+                    strike: trade.strike,
+                    isCall: trade.isCall,
+                    qty: trade.qty
+                };
+                openOptions.push(newOption);
+            } else {
+                // Closing
+                var pl = 0;
+                var closedLots = lots[ticker][option].splice(0, trade.qty);
+                for (var l in closedLots) {
+                    pl += trade.price - closedLots[l];
+                }
+                pl *= 100;
+                if (trade.buying) {
+                    pl = -pl; // E.g. STO @ 5, BTC @ 1 = 4 profit
+                }
+
+                positions[ticker][option].qty -= trade.qty;
+                positions[ticker].total.realizedPL += pl;
+                positions[ticker][option].realizedPL += pl;
+
+                // Find the option record in the open options
+                var optIndex;
+                for (var j in openOptions) {
+                    var opt = openOptions[j];
+                    // If we're STC, we're closing a long option, and if BTC, closing a short option
+                    if (opt.ticker === ticker && opt.isLong === !trade.buying && opt.expiration === trade.expiration && opt.strike === trade.strike && opt.isCall === trade.isCall) {
+                        optIndex = j;
+                        break;
+                    }
+                }
+                // Then remove quantity, and if it's closed, remove it from the list
+                openOptions[optIndex].qty -= trade.qty;
+                if (openOptions[optIndex].qty === 0) {
+                    openOptions.splice(optIndex, 1);
+                }
+            }
+        }
+    }
+
+    for (var ticker in positions) {
+        var position = positions[ticker];
+        var latestSharePrice = latestSharePrices[ticker];
+        var optionPrices = latestOptionPrices[ticker];
+        var positionOpenOptions = [];
+        for (var i in openOptions) {
+            if (openOptions[i].ticker === ticker) {
+                positionOpenOptions.push(openOptions[i]);
+            }
+        }
+        var tickerLots = lots[ticker];
+        var bought = tickerBought[ticker];
+        var sold = tickerSold[ticker];
+
+        // Total: +totalValue, realizedPL, +unrealizedPL, +totalPL, +totalPLPercent, +delta, +theta
+        // Shares, Options: qty, +breakeven, +marketPrice, +totalValue, realizedPL, +unrealizedPL, +totalPL, +totalPLPercent, +delta, +theta (not for shares)
+        if ('shares' in position && position.shares.qty > 0) {
+            position.shares.breakeven = (bought.shares - sold.shares) / position.shares.qty;
+            position.shares.marketPrice = latestSharePrice;
+            position.shares.totalValue = position.shares.marketPrice * position.shares.qty;
+            position.shares.unrealizedPL = 0;
+            for (var i in tickerLots.shares) {
+                position.shares.unrealizedPL += position.shares.marketPrice - tickerLots.shares[i];
+            }
+            position.shares.totalPL = position.shares.realizedPL + position.shares.unrealizedPL;
+            position.shares.totalPLPercent = position.shares.totalPL / bought.shares * 100;
+            position.shares.delta = position.shares.qty;
+
+            position.total.totalValue += position.shares.totalValue;
+            position.total.unrealizedPL += position.shares.unrealizedPL;
+            position.total.totalPL += position.shares.totalPL;
+            position.total.delta += position.shares.delta;
+        }
+        for (var option in position) {
+            if (option === 'total' || option === 'shares' || position[option].qty === 0) {
+                continue;
+            }
+
+            position[option].breakeven = (bought[option] - sold[option]) / position[option].qty;
+            position[option].marketPrice = (option.startsWith("Long") ? optionPrices[option].latestBid : optionPrices[option].latestAsk);
+            position[option].totalValue = position[option].marketPrice * position[option].qty * 100;
+            position[option].unrealizedPL = 0;
+            for (var i in tickerLots[option]) {
+                position[option].unrealizedPL += (position[option].marketPrice - tickerLots[option][i]) * 100;
+            }
+            position[option].totalPL = position[option].realizedPL + position[option].unrealizedPL;
+            position[option].totalPLPercent = position[option].totalPL / bought[option] * 100;
+            position[option].delta = optionPrices[option].delta * 100;
+            position[option].theta = optionPrices[option].theta * 100;
+
+            position.total.totalValue += position[option].totalValue;
+            position.total.unrealizedPL += position[option].unrealizedPL;
+            position.total.totalPL += position[option].totalPL;
+            if (!isNaN(position[option].delta)) {
+                if (option.startsWith("Long")) {
+                    position.total.delta += position[option].delta;
+                } else {
+                    position.total.delta -= position[option].delta;
+                }
+            }
+            if (!isNaN(position[option].theta)) {
+                if (option.startsWith("Long")) {
+                    position.total.theta += position[option].theta;
+                } else {
+                    position.total.theta -= position[option].theta;
+                }
+            }
+        }
+
+        position.total.breakeven = ('shares' in position && position.shares.qty > 0) ? ((bought.total - sold.total) / position.shares.qty) : undefined;
+        position.total.totalPLPercent = position.total.totalPL / bought.total * 100;
+    }
+}
+function updatePositionsTable(latestStats, openOptions) {
+    $('#open-positions-table tbody').children().remove();
+    $('#closed-positions-table tbody').children().remove();
+
+    var tickers = Object.keys(latestStats);
+    tickers.sort();
+
+    for (var i in tickers) {
+        var ticker = tickers[i];
+        var stats = latestStats[ticker];
+
+        // Only looking for open positions first
+        var isOpen = false;
+        for (var position in stats.lots) {
+            if (stats.lots[position].length > 0) {
+                isOpen = true;
+                break;
+            }
+        }
+        if (!isOpen) {
+            continue;
+        }
+
+        var options = ticker in openOptions ? openOptions[ticker] : {};
+        var latestSharePrice = stockPrices[ticker].prices[stockPrices[ticker].prices.length-1].c;
+
+        var totalValue = latestSharePrice * stats.lots.shares.length;
+        var isAnyDeltaNaN = false;
+        var isAnyThetaNaN = false;
+        var totalDelta = stats.lots.shares.length;
+        var totalTheta = 0;
+        for (var opt in options) {
+           var optionData = options[opt];
+           var qty = stats.lots[opt].length;
+           if (opt.startsWith('Long')) {
+                totalValue += optionData.latestBid * 100 * qty;
+                if (isNaN(optionData.delta)) {
+                    isAnyDeltaNaN = true;
+                } else {
+                    totalDelta += optionData.delta * 100 * qty;
+                }
+                if (isNaN(optionData.theta)) {
+                    isAnyThetaNaN = true;
+                } else {
+                    totalTheta += optionData.theta * 100 * qty;
+                }
+           } else {
+               totalValue += optionData.latestAsk * 100 * qty;
+               if (isNaN(optionData.delta)) {
+                   isAnyDeltaNaN = true;
+               } else {
+                   totalDelta -= optionData.delta * 100 * qty;
+               }
+               if (isNaN(optionData.theta)) {
+                   isAnyThetaNaN = true;
+               } else {
+                   totalTheta -= optionData.theta * 100 * qty;
+               }
+           }
+        }
+
+        // We need to simulate closing out the position now, to get 
+
+        // Symbol | Qty | Breakeven | Market Price | Total Value | Realized P/L | Unrealized P/L | Total P/L | % of Ticker Bought | Delta | Theta
+        // Header Row:
+        // Ticker | -- | Total Breakeven per Share | -- | Total Value | Realized P/L | Unrealized P/L | Total P/L | % of Ticker Bought | Delta | Theta 
+        // Shares Row:
+        // Ticker | # Shares | Breakeven per Share | Share Price | Total Share Value | Realized P/L | Unrealized P/L | Total P/L | % of Ticker Bought | Delta | -- 
+        // Options Row:
+        // Ticker | # Contracts | Breakeven per Contract | Contract Price | Total Contract Value | Realized P/L | Unrealized P/L | Total P/L | % of Ticker Bought | Delta | Theta 
+        var headerRow =
+            '<tr class="table-info">' +
+            '    <th scope="row">' + ticker + '</th>' +
+            '    <td>' + '--' + '</td>' +
+            '    <td>' + '--' + '</td>' +
+            '    <td>' + '--' + '</td>' +
+            '    <td>' + getPriceText(totalValue) + '</td>' +
+            '    <td>' + getPriceText(stats.stockPL) + '</td>' +
+            '    <td>' + (stats.stockPLPercent !== undefined ? stats.stockPLPercent.toFixed(2) + ' %' : '-') + '</td>' +
+            '    <td>' + totalDelta.toFixed(1) + (isAnyDeltaNaN ? ' + ?' : '') + '</td>' +
+            '    <td>' + (totalTheta === 0 ? '--' : (totalTheta.toFixed(1) + (isAnyThetaNaN ? ' + ?' : '') + '</td>')) +
+            '</tr>';
+            $('#open-positions-table tbody').append(headerRow);
+
+        if (stats.lots.shares.length > 0) {
+            // Symbol, Qty, Breakeven/Share, Market Price, Total Value, P/L, %, Delta, Theta
+            var sharesRow = 
+                '<tr>' +
+                '    <td>' + ticker + '</td>' +
+                '    <td>' + stats.lots.shares.length + '</td>' +
+                '    <td>' + getPriceText(stats.breakevenPerShare) + '</td>' +
+                '    <td>' + getPriceText(latestSharePrice) + '</td>' +
+                '    <td>' + getPriceText(stats.lots.shares.length * latestSharePrice) + '</td>' +
+                '    <td>' + '--' + '</td>' +
+                '    <td>' + '--' + '</td>' +
+                '    <td>' + stats.lots.shares.length + '</td>' +
+                '    <td>' + '--' + '</td>' +
+                '</tr>';
+            $('#open-positions-table tbody').append(sharesRow);
+        }
+    }
+}
+
+function processOptionsData(optionData) {
+    var rates = {
+        oneMo:   optionData.rates["1m"],
+        threeMo: optionData.rates["3m"],
+        sixMo:   optionData.rates["6m"],
+        oneYr:   optionData.rates["1yr"],
+        twoYr:   optionData.rates["2yr"]
+    };
+
+    var CALL = 1;
+    var PUT = 2;
+
+    function bisect(t, e, n, unknown1, unknown2) {
+        // t = bisect function
+        // e = 0
+        // n = 2000
+        // unknown1 = 0.01
+        // unknown2 = 30
+        var r = {
+            Max: 1,
+            Min: 2,
+            Zero: 0
+        };
+        var arguments = [t, e, n, unknown1, unknown2];
+        var i = arguments.length > 3 && void 0 !== arguments[3] ? arguments[3] : 0.001;
+        var a = arguments.length > 4 && void 0 !== arguments[4] ? arguments[4] : 30;
+        var o = arguments.length > 5 && void 0 !== arguments[5] ? arguments[5] : r.Zero;
+        if (i <= 0 || a < 1) throw new Error;
+        if (e > n) throw new Error('Left must be less than right');
+        for (var u = 0; u <= a; ) {
+            u++;
+            var s = (e + n) / 2;
+            if ((n - e) / 2 < i)
+                return s;
+            var l = t(s);
+            var c = t(e);
+            (o === r.Zero && Math.sign(c) === Math.sign(l) || o === r.Min && l < c || o === r.Max && l > c) ? e = s : n = s;
+        }
+        return e;
+    }
+    function d1(t, e, n, r, i) {
+        // t = last underlying price
+        // e = strike price
+        // n = rate / 100
+        // r = 0 (volatility?)
+        // i = time to expiration in years
+        return (Math.log(t / e) + (n + r * r / 2) * i) / (r * Math.sqrt(i));
+    }
+    function d2(t, e, n) {
+        // t = d1 return value
+        // e = 0 (volatility?)
+        // n = time to expiration in years
+        return t - e * Math.sqrt(n);
+    }
+    function cnd(t) {
+        if (t < 0) return 1 - cnd( - t);
+        var e = 1 / (1 + 0.2316419 * t);
+        return 1 - Math.exp( - t * t / 2) / Math.sqrt(2 * Math.PI) * e * (0.31938153 + e * (e * (1.781477937 + e * (1.330274429 * e - 1.821255978)) - 0.356563782));
+    }
+    function getPrice(t, e, n, r, i, a) {
+        // t = 1 for CALL, 2 for PUT
+        // e = last underlying price
+        // n = strike price
+        // r = time to expiration in years
+        // i = rate / 100
+        // a = 0 (volatility?)
+        var assumedVolatilityIfNaN;
+        Number.isNaN(a) && (a = assumedVolatilityIfNaN);
+        var o = d1(e, n, i, a, r);
+        var u = d2(o, a, r);
+        return t === CALL ? (e*cnd(o) - n*Math.exp(-i*r)*cnd(u)) : (n*Math.exp(-i*r)*cnd(-u) - e*cnd(-o));
+    }
+    function getIv2(t, e, n, r, i, a) {
+        // t = 1 for CALL, 2 for PUT
+        // e = bid-ask midpoint
+        // n = last underlying price
+        // r = strike price
+        // i = time to expiration in years
+        // a = rate / 100
+        var u = getPrice(t, n, r, i, a, 0);
+        return e < u ? NaN : bisect(function (u) {
+            return getPrice(t, n, r, i, a, u / 100) - e;
+        }, 0, 2000, 0.01, 30) / 100;
+    }
+    function getRate(t, rates) {
+        // t = time to expiration in days
+        var e = 365 / 12;
+        return t <= (e + 91.25) / 2 ? rates.oneMo : t <= 136.875 ? rates.threeMo : t <= 273.75 ? rates.sixMo : t <= 547.5 ? rates.oneYr : rates.twoYr;
+    }
+    function getIv(t, e, n, r, i, a) {
+        // t = bid-ask midpoint
+        // e = 1 for CALL, 2 for PUT
+        // n = expiration date object (at market close)
+        // r = strike price
+        // i = last underlying price
+        // a = risk-free interest rates object
+
+        var o = (n.getTime() - new Date().getTime()) / 1000 / 60 / 60 / 24; // time to expiration in days
+        var u = o / 365; // time to expiration in years
+        var s = getRate(o, a);
+        return getIv2(e, t, i, r, u, s / 100);
+    }
+    function stdpdf(t) {
+        return Math.exp( - Math.pow(t, 2) / 2) / 2.5066282746310002;
+    }
+    function getGreeks2(t, e, n, r, i, a) {
+        // t = 1 for CALL, 2 for PUT
+        // e = last underlying price
+        // n = expiration datetime object (at market close)
+        // r = time to expiration in years
+        // i = rate / 100
+        // a = volatility
+        var o = d1(e, n, i, a, r);
+        var u = d2(o, a, r);
+        var s = cnd(o);
+        var l = stdpdf(o);
+        var c = Math.sqrt(r);
+        var v = Math.exp(-i*r);
+        var y = {
+            delta: 0,
+            theta: 0,
+            rho: 0,
+            gamma: 0,
+            vega: 0
+        };
+        var p = -e*l*a / (2*c);
+        var g = i*n*v;
+        if (t === CALL) {
+            var b = cnd(u);
+            y.delta = s;
+            y.theta = (p - g*b) / 365;
+            y.rho = n*r*v*b / 100;
+        } else {
+            var S = cnd(-u);
+            y.delta = s - 1;
+            y.theta = (p + g*S) / 365;
+            y.rho = -n*r*v*S / 100;
+        }
+        y.gamma = l / (e*a*c);
+        y.vega = e*l*c / 100;
+        return y;
+    }
+    function getGreeks(t, e, n, r, i, a, o) {
+        // t = bid-ask midpoint
+        // e = 1 for CALL, 2 for PUT
+        // n = expiration datetime object (at market close)
+        // r = strike price
+        // i = last underlying price
+        // a = risk-free interest rates object
+        // o = volatility
+        var u = (n.getTime() - new Date().getTime()) / 1000 / 60 / 60 / 24; // time to expiration in days
+        var s = u / 365; // time to expiration in years
+        var l = getRate(u, a);
+        return getGreeks2(e, i, r, s, l / 100, o);
+    }
+    function fromData(e, n, r, i, a, o) {
+        // e = call or put data: {"b": 156.15,"a": 157.05,"oi": 44,"v": 0}
+        // n = 1 for CALL, 2 for PUT
+        // r = expiration datetime object (at market close)
+        // i = strike price
+        // a = last underlying price
+        // o = risk-free interest rates object
+        var u = {
+            bid: 0,
+            ask: 0,
+            volatility: 0,
+            greeks: {},
+            oi: 0,
+            volume: 0,
+            mark: 0
+        };
+        u.bid = e.b;
+        u.ask = e.a;
+        u.mark = Math.round((100 * u.bid + 100 * u.ask) / 2) / 100; // bid-ask midpoint
+        u.oi = e.oi;
+        u.volume = e.v;
+        u.volatility = getIv(u.mark, n, r, i, a, o);
+        u.greeks = getGreeks(u.mark, n, r, i, a, o, u.volatility);
+        return u;
+    }
+
+    for (var expDateStr in optionData.options) {
+        // expiration date as string (yymmdd)
+        var expDate = new Date(expDateStr.substr(2,2) + '/' + expDateStr.substr(4,2) + '/20' + expDateStr.substr(0,2) + ' 13:00:00'); // should be a date object of expiration (at market close)
+        for (var strikePriceStr in optionData.options[expDateStr]) {
+            var strikePrice = parseFloat(strikePriceStr);
+            var option = optionData.options[expDateStr][strikePriceStr];
+
+            var callData = fromData(option.c, CALL, expDate, strikePrice, optionData.underlying.last, rates);
+            var putData =  fromData(option.p, PUT,  expDate, strikePrice, optionData.underlying.last, rates);
+
+            optionData.options[expDateStr][strikePriceStr].c = callData;
+            optionData.options[expDateStr][strikePriceStr].p = putData;
+        }
     }
 }
