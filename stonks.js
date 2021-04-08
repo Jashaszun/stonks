@@ -24,6 +24,17 @@ function getPriceText(price) {
     }
     return text;
 }
+function getPercentText(percent) {
+    if (percent === undefined) {
+        return '-';
+    } else if (percent === Infinity) {
+        return "∞%";
+    } else if (percent === -Infinity) {
+        return "-∞%";
+    } else {
+        return percent.toFixed(2) + ' %';
+    }
+}
 function getTodayDate() {
     var date = new Date();
     return new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -1190,9 +1201,9 @@ function updateStats() {
             '    <td>' + getPriceText(trade.totalBought) + '</td>' +
             '    <td>' + getPriceText(trade.totalSold) + '</td>' +
             '    <td>' + getPriceText(trade.pl) + '</td>' +
-            '    <td>' + (trade.plPercent !== undefined ? trade.plPercent.toFixed(2) + ' %' : '-') + '</td>' +
+            '    <td>' + getPercentText(trade.plPercent) + '</td>' +
             '    <td>' + getPriceText(trade.totalPL) + '</td>' +
-            '    <td>' + (trade.totalPLPercent !== undefined ? trade.totalPLPercent.toFixed(2) + ' %' : '-') + '</td>' +
+            '    <td>' + getPercentText(trade.totalPLPercent) + '</td>' +
             '</tr>'
         );
     }
@@ -1212,10 +1223,10 @@ function updateStats() {
                 '    <td>' + trade.lots.shares.length.toString() + '</td>' +
                 '    <td>' + getPriceText(trade.breakevenPerShare) + '</td>' +
                 '    <td>' + getPriceText(trade.pl) + '</td>' +
-                '    <td>' + (trade.plPercent !== undefined ? trade.plPercent.toFixed(2) + ' %' : '-') + '</td>' +
+                '    <td>' + getPercentText(trade.plPercent) + '</td>' +
                 '    <td>' + getPriceText(trade.stockPL) + '</td>' +
-                '    <td>' + (trade.stockPLPercent !== undefined ? trade.stockPLPercent.toFixed(2) + ' %' : '-') + '</td>' +
-                '    <td>' + (trade.totalPLPercent !== undefined ? trade.totalPLPercent.toFixed(2) + ' %' : '-') + '</td>' +
+                '    <td>' + getPercentText(trade.stockPLPercent) + '</td>' +
+                '    <td>' + getPercentText(trade.totalPLPercent) + '</td>' +
                 '</tr>'
             );
         }
@@ -1592,7 +1603,7 @@ function computeAndUpdatePositions(latestOptionPrices) {
                 continue;
             }
 
-            position[option].breakeven = (bought[option] - sold[option]) / position[option].qty;
+            position[option].breakeven = (bought[option] - sold[option]) / position[option].qty / 100;
             // If this is a closed option, we won't have a price for it
             position[option].marketPrice = (optionPrices && option in optionPrices) ? ((option.startsWith("Long") ? optionPrices[option].latestBid : optionPrices[option].latestAsk)) : NaN;
             position[option].totalValue = isNaN(position[option].marketPrice) ? 0 : (position[option].marketPrice * position[option].qty * 100);
@@ -1606,24 +1617,28 @@ function computeAndUpdatePositions(latestOptionPrices) {
             position[option].delta = (optionPrices && option in optionPrices) ? (optionPrices[option].delta * 100 * position[option].qty) : NaN;
             position[option].theta = (optionPrices && option in optionPrices) ? (optionPrices[option].theta * 100 * position[option].qty) : NaN;
 
+            if (option.startsWith("Short")) {
+                // Breakeven, total value, all P/Ls, P/L %, delta, and theta are opposite of what they should be
+                position[option].breakeven = -position[option].breakeven;
+                position[option].totalValue = -position[option].totalValue;
+                position[option].unrealizedPL = -position[option].unrealizedPL;
+                position[option].realizedPL = -position[option].realizedPL;
+                position[option].totalPL = -position[option].totalPL;
+                position[option].totalPLPercent = -position[option].totalPLPercent;
+                position[option].delta = -position[option].delta;
+                position[option].theta = -position[option].theta;
+            }
+
             if (position[option].qty > 0) {
                 position.total.totalValue += position[option].totalValue;
                 position.total.realizedPL += position[option].realizedPL;
                 position.total.unrealizedPL += position[option].unrealizedPL;
                 position.total.totalPL += position[option].totalPL;
                 if (!isNaN(position[option].delta)) {
-                    if (option.startsWith("Long")) {
-                        position.total.delta += position[option].delta;
-                    } else {
-                        position.total.delta -= position[option].delta;
-                    }
+                    position.total.delta += position[option].delta;
                 }
                 if (!isNaN(position[option].theta)) {
-                    if (option.startsWith("Long")) {
-                        position.total.theta += position[option].theta;
-                    } else {
-                        position.total.theta -= position[option].theta;
-                    }
+                    position.total.theta += position[option].theta;
                 }
             }
         }
@@ -1780,7 +1795,7 @@ function updatePositionsTable(summaries, openPositions, closedPositions) {
             '    <td>' + getPriceText(position.total.realizedPL) + '</td>' +
             '    <td>' + getPriceText(position.total.unrealizedPL) + '</td>' +
             '    <td>' + getPriceText(position.total.totalPL) + '</td>' +
-            '    <td>' + (position.total.totalPLPercent !== Infinity ? position.total.totalPLPercent.toFixed(2) + ' %' : '∞%') + '</td>' +
+            '    <td>' + getPercentText(position.total.totalPLPercent) + '</td>' +
             '    <td>' + position.total.delta.toFixed(1) + '</td>' +
             '    <td>' + (position.total.theta === 0 ? '--' : position.total.theta.toFixed(1)) + '</td>' +
             '</tr>';
@@ -1790,13 +1805,13 @@ function updatePositionsTable(summaries, openPositions, closedPositions) {
                 '<tr>' +
                 '    <th scope="row"><i class="bi bi-caret-right-fill"></i>  ' + ticker + '</th>' +
                 '    <td>' + position.shares.qty.toString() + '</td>' +
-                '    <td>' + getPriceText(position.shares.breakeven) + '/sh' + '</td>' +
+                '    <td>' + getPriceText(position.shares.breakeven) + '</td>' +
                 '    <td>' + getPriceText(position.shares.marketPrice) + '</td>' +
                 '    <td>' + getPriceText(position.shares.totalValue) + '</td>' +
                 '    <td>' + getPriceText(position.shares.realizedPL) + '</td>' +
                 '    <td>' + getPriceText(position.shares.unrealizedPL) + '</td>' +
                 '    <td>' + getPriceText(position.shares.totalPL) + '</td>' +
-                '    <td>' + (position.shares.totalPLPercent !== Infinity ? position.shares.totalPLPercent.toFixed(2) + ' %' : '∞%') + '</td>' +
+                '    <td>' + getPercentText(position.shares.totalPLPercent) + '</td>' +
                 '    <td>' + position.shares.delta.toFixed(1) + '</td>' +
                 '    <td>' + '--' + '</td>' +
                 '</tr>';
@@ -1815,13 +1830,13 @@ function updatePositionsTable(summaries, openPositions, closedPositions) {
                 '<tr>' +
                 '    <th scope="row"><i class="bi bi-caret-right-fill"></i>  ' + symbol + '</th>' +
                 '    <td>' + position[option].qty.toString() + '</td>' +
-                '    <td>' + getPriceText(position[option].breakeven) + '/opt' + '</td>' +
+                '    <td>' + getPriceText(position[option].breakeven) + '</td>' +
                 '    <td>' + getPriceText(position[option].marketPrice) + '</td>' +
                 '    <td>' + getPriceText(position[option].totalValue) + '</td>' +
                 '    <td>' + getPriceText(position[option].realizedPL) + '</td>' +
                 '    <td>' + getPriceText(position[option].unrealizedPL) + '</td>' +
                 '    <td>' + getPriceText(position[option].totalPL) + '</td>' +
-                '    <td>' + (position[option].totalPLPercent !== Infinity ? position[option].totalPLPercent.toFixed(2) + ' %' : '∞%') + '</td>' +
+                '    <td>' + getPercentText(position[option].totalPLPercent) + '</td>' +
                 '    <td>' + (isNaN(position[option].delta) ? '??' : position[option].delta.toFixed(1)) + '</td>' +
                 '    <td>' + (isNaN(position[option].theta) ? '??' : position[option].theta.toFixed(1)) + '</td>' +
                 '</tr>';
@@ -1838,7 +1853,7 @@ function updatePositionsTable(summaries, openPositions, closedPositions) {
         '    <th scope="row">' + getPriceText(summaries.open.realizedPL) + '</th>' +
         '    <th scope="row">' + getPriceText(summaries.open.unrealizedPL) + '</th>' +
         '    <th scope="row">' + getPriceText(summaries.open.totalPL) + '</th>' +
-        '    <th scope="row">' + (summaries.open.totalPLPercent !== Infinity ? summaries.open.totalPLPercent.toFixed(2) + ' %' : '∞%') + '</th>' +
+        '    <th scope="row">' + getPercentText(summaries.open.totalPLPercent) + '</th>' +
         '    <th scope="row"></th>' +
         '    <th scope="row">' + (summaries.open.theta === 0 ? '--' : summaries.open.theta.toFixed(1)) + '</th>' +
         '</tr>';
@@ -1893,7 +1908,7 @@ function updatePositionsTable(summaries, openPositions, closedPositions) {
             '<tr class="table-info">' +
             '    <th scope="row">' + headerSymbol + '</th>' +
             '    <td>' + getPriceText(totals.realizedPL) + '</td>' +
-            '    <td>' + (totals.totalPLPercent !== Infinity ? totals.totalPLPercent.toFixed(2) + ' %' : '∞%') + '</td>' +
+            '    <td>' + getPercentText(totals.totalPLPercent) + '</td>' +
             '</tr>';
         $('#closed-positions-table tbody').append(headerRow);
         if (needsSubRows) {
@@ -1902,7 +1917,7 @@ function updatePositionsTable(summaries, openPositions, closedPositions) {
                     '<tr>' +
                     '    <th scope="row"><i class="bi bi-caret-right-fill"></i>  ' + ticker + '</th>' +
                     '    <td>' + getPriceText(position.shares.realizedPL) + '</td>' +
-                    '    <td>' + (position.shares.totalPLPercent !== Infinity ? position.shares.totalPLPercent.toFixed(2) + ' %' : '∞%') + '</td>' +
+                    '    <td>' + getPercentText(position.shares.totalPLPercent) + '</td>' +
                     '</tr>';
                 $('#closed-positions-table tbody').append(sharesRow);
             }
@@ -1919,7 +1934,7 @@ function updatePositionsTable(summaries, openPositions, closedPositions) {
                     '<tr>' +
                     '    <th scope="row"><i class="bi bi-caret-right-fill"></i>  ' + symbol + '</th>' +
                     '    <td>' + getPriceText(position[option].realizedPL) + '</td>' +
-                    '    <td>' + (position[option].totalPLPercent !== Infinity ? position[option].totalPLPercent.toFixed(2) + ' %' : '∞%') + '</td>' +
+                    '    <td>' + getPercentText(position[option].totalPLPercent) + '</td>' +
                     '</tr>';
                 $('#closed-positions-table tbody').append(optionRow);
             }
@@ -1929,7 +1944,7 @@ function updatePositionsTable(summaries, openPositions, closedPositions) {
         '<tr class="table-primary">' +
         '    <th scope="row">Total:</th>' +
         '    <th scope="row">' + getPriceText(summaries.closed.totalPL) + '</th>' +
-        '    <th scope="row">' + (summaries.closed.totalPLPercent !== Infinity ? summaries.closed.totalPLPercent.toFixed(2) + ' %' : '∞%') + '</th>' +
+        '    <th scope="row">' + getPercentText(summaries.closed.totalPLPercent) + '</th>' +
         '</tr>';
     $('#closed-positions-table tbody').append(closedPositionsFooterRow);
 
@@ -1939,7 +1954,7 @@ function updatePositionsTable(summaries, openPositions, closedPositions) {
         '    <th scope="row">' + getPriceText(summaries.all.realizedPL) + '</th>' +
         '    <th scope="row">' + getPriceText(summaries.all.unrealizedPL) + '</th>' +
         '    <th scope="row">' + getPriceText(summaries.all.totalPL) + '</th>' +
-        '    <th scope="row">' + (summaries.all.totalPLPercent !== Infinity ? summaries.all.totalPLPercent.toFixed(2) + ' %' : '∞%') + '</th>' +
+        '    <th scope="row">' + getPercentText(summaries.all.totalPLPercent) + '</th>' +
         '    <th scope="row">' + (summaries.all.theta === 0 ? '--' : summaries.all.theta.toFixed(1)) + '</th>' +
         '</tr>';
     $('#summary-positions-table tbody').html(summaryRow);
