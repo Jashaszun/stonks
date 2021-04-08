@@ -153,42 +153,85 @@
                     </ul>
                     <div class="tab-content">
                         <div class="tab-pane fade show active" id="positionsTabContent" role="tabpanel">
-                            <h4>Open Positions</h4>
-                            <br/>
-                            <table class="table table-hover" id="open-positions-table">
-                                <thead>
-                                    <tr>
-                                        <th scope="col">Symbol</th>
-                                        <th scope="col">Quantity</th>
-                                        <th scope="col">Breakeven</th>
-                                        <th scope="col">Market Price</th>
-                                        <th scope="col">Total Value</th>
-                                        <th scope="col">Realized P/L</th>
-                                        <th scope="col">Unrealized P/L</th>
-                                        <th scope="col">Total P/L</th>
-                                        <th scope="col">%</th>
-                                        <th scope="col">Δ</th>
-                                        <th scope="col">θ</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    
-                                </tbody>
-                            </table>
-                            <h4>Closed Positions</h4>
-                            <br/>
-                            <table class="table table-hover" id="closed-positions-table">
-                                <thead>
-                                    <tr>
-                                        <th scope="col">Symbol</th>
-                                        <th scope="col">P/L</th>
-                                        <th scope="col">%</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    
-                                </tbody>
-                            </table>
+                            <div class="row mx-1"><h4>Summary</h4></div>
+                            <div class="row mx-2">
+                                <table class="table table-hover" id="summary-positions-table">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">Total Value</th>
+                                            <th scope="col">Realized P/L</th>
+                                            <th scope="col">Unrealized P/L</th>
+                                            <th scope="col">Total P/L</th>
+                                            <th scope="col">%</th>
+                                            <th scope="col">θ</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr class="table-primary">
+                                            <th scope="row">...</th>
+                                            <th scope="row">...</th>
+                                            <th scope="row">...</th>
+                                            <th scope="row">...</th>
+                                            <th scope="row">...</th>
+                                            <th scope="row">...</th>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="row mx-1"><h4>Open Positions</h4></div>
+                            <div class="row mx-2">
+                                <table class="table table-hover" id="open-positions-table">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">Symbol</th>
+                                            <th scope="col">Quantity</th>
+                                            <th scope="col">Breakeven</th>
+                                            <th scope="col">Market Price</th>
+                                            <th scope="col">Total Value</th>
+                                            <th scope="col">Realized P/L</th>
+                                            <th scope="col">Unrealized P/L</th>
+                                            <th scope="col">Total P/L</th>
+                                            <th scope="col">%</th>
+                                            <th scope="col">Δ</th>
+                                            <th scope="col">θ</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr class="table-primary">
+                                            <th scope="row">Total:</th>
+                                            <th scope="row"></th>
+                                            <th scope="row"></th>
+                                            <th scope="row"></th>
+                                            <th scope="row">...</th>
+                                            <th scope="row">...</th>
+                                            <th scope="row">...</th>
+                                            <th scope="row">...</th>
+                                            <th scope="row">...</th>
+                                            <th scope="row"></th>
+                                            <th scope="row">...</th>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="row mx-1"><h4>Closed Positions</h4></div>
+                            <div class="row mx-2">
+                                <table class="table table-hover" id="closed-positions-table">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">Symbol</th>
+                                            <th scope="col">Realized P/L</th>
+                                            <th scope="col">%</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr class="table-primary">
+                                            <th scope="row">Total:</th>
+                                            <th scope="row">...</th>
+                                            <th scope="row">...</th>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                         <div class="tab-pane fade" id="tradesTabContent" role="tabpanel">
                             <div id="tradesAccordion" class="accordion accordion-flush">

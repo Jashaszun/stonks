@@ -1486,7 +1486,6 @@ function computeAndUpdatePositions(latestOptionPrices) {
                 }
 
                 positions[ticker].shares.qty -= trade.qty;
-                positions[ticker].total.realizedPL += pl;
                 positions[ticker].shares.realizedPL += pl;
             }
 
@@ -1529,7 +1528,6 @@ function computeAndUpdatePositions(latestOptionPrices) {
                 }
 
                 positions[ticker][option].qty -= trade.qty;
-                positions[ticker].total.realizedPL += pl;
                 positions[ticker][option].realizedPL += pl;
 
                 // Find the option record in the open options
@@ -1569,7 +1567,7 @@ function computeAndUpdatePositions(latestOptionPrices) {
 
         // Total: +totalValue, realizedPL, +unrealizedPL, +totalPL, +totalPLPercent, +delta, +theta
         // Shares, Options: qty, +breakeven, +marketPrice, +totalValue, realizedPL, +unrealizedPL, +totalPL, +totalPLPercent, +delta, +theta (not for shares)
-        if ('shares' in position/* && position.shares.qty > 0*/) {
+        if ('shares' in position) {
             position.shares.breakeven = (bought.shares - sold.shares) / position.shares.qty;
             position.shares.marketPrice = latestSharePrice;
             position.shares.totalValue = position.shares.marketPrice * position.shares.qty;
@@ -1581,13 +1579,16 @@ function computeAndUpdatePositions(latestOptionPrices) {
             position.shares.totalPLPercent = position.shares.totalPL / bought.shares * 100;
             position.shares.delta = position.shares.qty;
 
-            position.total.totalValue += position.shares.totalValue;
-            position.total.unrealizedPL += position.shares.unrealizedPL;
-            position.total.totalPL += position.shares.totalPL;
-            position.total.delta += position.shares.delta;
+            if (position.shares.qty > 0) {
+                position.total.totalValue += position.shares.totalValue;
+                position.total.realizedPL += position.shares.realizedPL;
+                position.total.unrealizedPL += position.shares.unrealizedPL;
+                position.total.totalPL += position.shares.totalPL;
+                position.total.delta += position.shares.delta;
+            }
         }
         for (var option in position) {
-            if (option === 'total' || option === 'shares'/* || position[option].qty === 0*/) {
+            if (option === 'total' || option === 'shares') {
                 continue;
             }
 
@@ -1605,21 +1606,24 @@ function computeAndUpdatePositions(latestOptionPrices) {
             position[option].delta = (optionPrices && option in optionPrices) ? (optionPrices[option].delta * 100 * position[option].qty) : NaN;
             position[option].theta = (optionPrices && option in optionPrices) ? (optionPrices[option].theta * 100 * position[option].qty) : NaN;
 
-            position.total.totalValue += position[option].totalValue;
-            position.total.unrealizedPL += position[option].unrealizedPL;
-            position.total.totalPL += position[option].totalPL;
-            if (!isNaN(position[option].delta)) {
-                if (option.startsWith("Long")) {
-                    position.total.delta += position[option].delta;
-                } else {
-                    position.total.delta -= position[option].delta;
+            if (position[option].qty > 0) {
+                position.total.totalValue += position[option].totalValue;
+                position.total.realizedPL += position[option].realizedPL;
+                position.total.unrealizedPL += position[option].unrealizedPL;
+                position.total.totalPL += position[option].totalPL;
+                if (!isNaN(position[option].delta)) {
+                    if (option.startsWith("Long")) {
+                        position.total.delta += position[option].delta;
+                    } else {
+                        position.total.delta -= position[option].delta;
+                    }
                 }
-            }
-            if (!isNaN(position[option].theta)) {
-                if (option.startsWith("Long")) {
-                    position.total.theta += position[option].theta;
-                } else {
-                    position.total.theta -= position[option].theta;
+                if (!isNaN(position[option].theta)) {
+                    if (option.startsWith("Long")) {
+                        position.total.theta += position[option].theta;
+                    } else {
+                        position.total.theta -= position[option].theta;
+                    }
                 }
             }
         }
@@ -1644,15 +1648,117 @@ function computeAndUpdatePositions(latestOptionPrices) {
             closedPositions[ticker] = positions[ticker];
         }
     }
-    updatePositionsTable(openPositions, closedPositions);
+    for (var ticker in openPositions) {
+        var position = openPositions[ticker];
+        var partiallyClosed = false;
+        for (var security in position) {
+            if (security !== 'total' && position[security].qty === 0) {
+                partiallyClosed = true;
+                break;
+            }
+        }
+        if (!partiallyClosed) {
+            continue;
+        }
+        
+        position.totalFromClosed = {
+            symbol: ticker,
+            realizedPL: 0,
+            totalPLPercent: undefined
+        };
+        for (var security in position) {
+            if (security !== 'total' && position[security].qty === 0) {
+                position.totalFromClosed.realizedPL += position[security].realizedPL;
+            }
+        }
+        position.totalFromClosed.totalPLPercent = position.totalFromClosed.realizedPL / tickerBought[ticker].total * 100;
+    }
+    for (var ticker in closedPositions) {
+        var position = closedPositions[ticker];
+        for (var security in position) {
+            if (security !== 'total') {
+                position.total.realizedPL += position[security].realizedPL;
+            }
+        }
+        position.total.totalPL = position.total.realizedPL;
+        position.total.totalPLPercent = position.total.totalPL / tickerBought[ticker].total * 100;
+    }
+
+    var summaries = {
+        open: {
+            totalValue: 0,
+            realizedPL: 0,
+            unrealizedPL: 0,
+            totalPL: 0,
+            totalPLPercent: undefined,
+            theta: 0
+        },
+        closed: {
+            totalPL: 0,
+            totalPLPercent: undefined
+        },
+        all: {
+            totalValue: 0,
+            realizedPL: 0,
+            unrealizedPL: 0,
+            totalPL: 0,
+            totalPLPercent: undefined,
+            theta: 0
+        }
+    };
+
+    var totalOpenBought = 0;
+    for (var ticker in openPositions) {
+        var total = openPositions[ticker].total;
+        summaries.open.totalValue += total.totalValue;
+        summaries.open.realizedPL += total.realizedPL;
+        summaries.open.unrealizedPL += total.unrealizedPL;
+        summaries.open.totalPL += total.totalPL;
+        summaries.open.theta += total.theta;
+        totalOpenBought += tickerBought[ticker].total;
+    }
+    summaries.open.totalPLPercent = summaries.open.totalPL / totalOpenBought * 100;
+
+    var totalClosedBought = 0;
+    for (var ticker in openPositions) {
+        var partiallyClosed = false;
+        var position = openPositions[ticker];
+        for (var security in position) {
+            if (security !== 'total' && security !== 'totalFromClosed' && position[security].qty === 0) {
+                partiallyClosed = true;
+                break;
+            }
+        }
+        if (partiallyClosed) {
+            totalClosedBought += tickerBought[ticker].total;
+            summaries.closed.totalPL += position.totalFromClosed.realizedPL;
+        }
+    }
+    for (var ticker in closedPositions) {
+        summaries.closed.totalPL += closedPositions[ticker].total.totalPL;
+    }
+    summaries.closed.totalPLPercent = summaries.closed.totalPL / totalClosedBought * 100;
+
+    var totalBought = 0;
+    for (var ticker in positions) {
+        var total = positions[ticker].total;
+        summaries.all.totalValue += total.totalValue;
+        summaries.all.realizedPL += total.realizedPL;
+        summaries.all.unrealizedPL += total.unrealizedPL;
+        summaries.all.totalPL += total.totalPL;
+        summaries.all.theta += total.theta;
+        totalBought += tickerBought[ticker].total;
+    }
+    summaries.all.totalPLPercent = summaries.all.totalPL / totalBought * 100;
+
+    updatePositionsTable(summaries, openPositions, closedPositions);
 }
-function updatePositionsTable(openPositions, closedPositions) {
+function updatePositionsTable(summaries, openPositions, closedPositions) {
     $('#open-positions-table tbody').children().remove();
     $('#closed-positions-table tbody').children().remove();
 
     var openTickers = Object.keys(openPositions);
     openTickers.sort();
-
     for (var i in openTickers) {
         var ticker = openTickers[i];
         var position = openPositions[ticker];
@@ -1667,9 +1773,9 @@ function updatePositionsTable(openPositions, closedPositions) {
         var headerRow =
             '<tr class="table-info">' +
             '    <th scope="row">' + ticker + '</th>' +
-            '    <td>' + '--' + '</td>' +
+            '    <td></td>' +
             '    <td>' + (position.total.breakeven === undefined ? '--' : (getPriceText(position.total.breakeven) + '/sh')) + '</td>' +
-            '    <td>' + '--' + '</td>' +
+            '    <td></td>' +
             '    <td>' + getPriceText(position.total.totalValue) + '</td>' +
             '    <td>' + getPriceText(position.total.realizedPL) + '</td>' +
             '    <td>' + getPriceText(position.total.unrealizedPL) + '</td>' +
@@ -1697,13 +1803,17 @@ function updatePositionsTable(openPositions, closedPositions) {
             $('#open-positions-table tbody').append(sharesRow);
         }
         for (var option in position) {
-            if (option === 'total' || option === 'shares' || position[option].qty === 0) {
+            if (option === 'total' || option === 'totalFromClosed' || option === 'shares' || position[option].qty === 0) {
                 continue;
             }
 
+            var symbol = option;
+            if (symbol.startsWith("Long ")) {
+                symbol = symbol.substr("Long ".length);
+            }
             var optionRow = 
                 '<tr>' +
-                '    <th scope="row"><i class="bi bi-caret-right-fill"></i>  ' + option + '</th>' +
+                '    <th scope="row"><i class="bi bi-caret-right-fill"></i>  ' + symbol + '</th>' +
                 '    <td>' + position[option].qty.toString() + '</td>' +
                 '    <td>' + getPriceText(position[option].breakeven) + '/opt' + '</td>' +
                 '    <td>' + getPriceText(position[option].marketPrice) + '</td>' +
@@ -1718,6 +1828,121 @@ function updatePositionsTable(openPositions, closedPositions) {
             $('#open-positions-table tbody').append(optionRow);
         }
     }
+    var openPositionsFooterRow =
+        '<tr class="table-primary">' +
+        '    <th scope="row">Total:</th>' +
+        '    <th scope="row"></th>' +
+        '    <th scope="row"></th>' +
+        '    <th scope="row"></th>' +
+        '    <th scope="row">' + getPriceText(summaries.open.totalValue) + '</th>' +
+        '    <th scope="row">' + getPriceText(summaries.open.realizedPL) + '</th>' +
+        '    <th scope="row">' + getPriceText(summaries.open.unrealizedPL) + '</th>' +
+        '    <th scope="row">' + getPriceText(summaries.open.totalPL) + '</th>' +
+        '    <th scope="row">' + (summaries.open.totalPLPercent !== Infinity ? summaries.open.totalPLPercent.toFixed(2) + ' %' : '∞%') + '</th>' +
+        '    <th scope="row"></th>' +
+        '    <th scope="row">' + (summaries.open.theta === 0 ? '--' : summaries.open.theta.toFixed(1)) + '</th>' +
+        '</tr>';
+    $('#open-positions-table tbody').append(openPositionsFooterRow);
+
+    var closedTickers = [];
+    for (var i in openTickers) {
+        var ticker = openTickers[i];
+        var position = openPositions[ticker];
+        for (var security in position) {
+            if (security !== 'total' && position[security].qty === 0) {
+                closedTickers.push(ticker);
+                break;
+            }
+        }
+    }
+    closedTickers = closedTickers.concat(Object.keys(closedPositions));
+    closedTickers.sort();
+    for (var i in closedTickers) {
+        var ticker = closedTickers[i];
+        var fullyClosed = ticker in closedPositions;
+        var position = fullyClosed ? closedPositions[ticker] : openPositions[ticker];
+
+        var totals = fullyClosed ? position.total : position.totalFromClosed;
+
+        var numClosedSecurities = 0;
+        for (var security in position) {
+            if (position !== 'total' && position !== 'totalFromClosed' && position[security].qty === 0) {
+                numClosedSecurities++;
+            }
+        }
+        var needsSubRows = numClosedSecurities > 1;
+
+        // Symbol | Realized P/L | % of Ticker Bought
+        var headerSymbol = ticker;
+        if (!needsSubRows) {
+            for (var security in position) {
+                if (position !== 'total' && position !== 'totalFromClosed' && position[security].qty === 0) {
+                    if (security === 'shares') {
+                        headerSymbol = ticker;
+                    } else {
+                        headerSymbol = security;
+                        if (headerSymbol.startsWith("Long ")) {
+                            headerSymbol = headerSymbol.substr("Long ".length);
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        var headerRow =
+            '<tr class="table-info">' +
+            '    <th scope="row">' + headerSymbol + '</th>' +
+            '    <td>' + getPriceText(totals.realizedPL) + '</td>' +
+            '    <td>' + (totals.totalPLPercent !== Infinity ? totals.totalPLPercent.toFixed(2) + ' %' : '∞%') + '</td>' +
+            '</tr>';
+        $('#closed-positions-table tbody').append(headerRow);
+        if (needsSubRows) {
+            if ('shares' in position && position.shares.qty == 0) {
+                var sharesRow = 
+                    '<tr>' +
+                    '    <th scope="row"><i class="bi bi-caret-right-fill"></i>  ' + ticker + '</th>' +
+                    '    <td>' + getPriceText(position.shares.realizedPL) + '</td>' +
+                    '    <td>' + (position.shares.totalPLPercent !== Infinity ? position.shares.totalPLPercent.toFixed(2) + ' %' : '∞%') + '</td>' +
+                    '</tr>';
+                $('#closed-positions-table tbody').append(sharesRow);
+            }
+            for (var option in position) {
+                if (option === 'total' || option === 'totalFromClosed' || option === 'shares' || position[option].qty > 0) {
+                    continue;
+                }
+
+                var symbol = option;
+                if (symbol.startsWith("Long ")) {
+                    symbol = symbol.substr("Long ".length);
+                }
+                var optionRow = 
+                    '<tr>' +
+                    '    <th scope="row"><i class="bi bi-caret-right-fill"></i>  ' + symbol + '</th>' +
+                    '    <td>' + getPriceText(position[option].realizedPL) + '</td>' +
+                    '    <td>' + (position[option].totalPLPercent !== Infinity ? position[option].totalPLPercent.toFixed(2) + ' %' : '∞%') + '</td>' +
+                    '</tr>';
+                $('#closed-positions-table tbody').append(optionRow);
+            }
+        }
+    }
+    var closedPositionsFooterRow =
+        '<tr class="table-primary">' +
+        '    <th scope="row">Total:</th>' +
+        '    <th scope="row">' + getPriceText(summaries.closed.totalPL) + '</th>' +
+        '    <th scope="row">' + (summaries.closed.totalPLPercent !== Infinity ? summaries.closed.totalPLPercent.toFixed(2) + ' %' : '∞%') + '</th>' +
+        '</tr>';
+    $('#closed-positions-table tbody').append(closedPositionsFooterRow);
+
+    var summaryRow = 
+        '<tr class="table-primary">' +
+        '    <th scope="row">' + getPriceText(summaries.all.totalValue) + '</th>' +
+        '    <th scope="row">' + getPriceText(summaries.all.realizedPL) + '</th>' +
+        '    <th scope="row">' + getPriceText(summaries.all.unrealizedPL) + '</th>' +
+        '    <th scope="row">' + getPriceText(summaries.all.totalPL) + '</th>' +
+        '    <th scope="row">' + (summaries.all.totalPLPercent !== Infinity ? summaries.all.totalPLPercent.toFixed(2) + ' %' : '∞%') + '</th>' +
+        '    <th scope="row">' + (summaries.all.theta === 0 ? '--' : summaries.all.theta.toFixed(1)) + '</th>' +
+        '</tr>';
+    $('#summary-positions-table tbody').html(summaryRow);
 }
 
 function processOptionsData(optionData) {
