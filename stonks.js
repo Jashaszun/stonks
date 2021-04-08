@@ -1789,7 +1789,7 @@ function updatePositionsTable(summaries, openPositions, closedPositions) {
             '<tr class="table-info">' +
             '    <th scope="row">' + ticker + '</th>' +
             '    <td></td>' +
-            '    <td>' + (position.total.breakeven === undefined ? '--' : (getPriceText(position.total.breakeven) + '/sh')) + '</td>' +
+            '    <td>' + (position.total.breakeven === undefined ? '--' : getPriceText(position.total.breakeven)) + '</td>' +
             '    <td></td>' +
             '    <td>' + getPriceText(position.total.totalValue) + '</td>' +
             '    <td>' + getPriceText(position.total.realizedPL) + '</td>' +
