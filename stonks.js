@@ -725,6 +725,8 @@ function cancelTradeEditBtnClicked() {
     $('#addTradeBtn').addClass('btn-primary');
     $('#addTradeBtn').html('<i class="bi bi-plus"></i>  Add Trade');
     $('#cancelTradeEditBtn').addClass('cancel-trade-edit-btn-not-displayed');
+    
+    editingTradeIndex = undefined;
 }
 function removeTradeBtnClicked(removeBtn) {
     var removeIndex = removeBtn.parentElement.parentElement.rowIndex - 1; // 0 is the header
