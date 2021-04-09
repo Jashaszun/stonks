@@ -180,7 +180,7 @@ function updateGraphs() {
         function getStockPrices(priceRequests) {
             if (priceRequests.length > 0) {
                 var request = priceRequests[0];
-                $.getJSON("http://73.254.230.39:8123/ticker/" + request.ticker, function(data) {
+                $.getJSON("/ticker/" + request.ticker, function(data) {
                     console.log("Got historical data for " + request.ticker);
                     stockPrices[request.ticker] = data.data;
                     window.localStorage.setItem("stockPrices", JSON.stringify(stockPrices));
@@ -1604,6 +1604,9 @@ function computeAndUpdatePositions(latestOptionPrices) {
             }
 
             position[option].breakeven = (bought[option] - sold[option]) / position[option].qty / 100;
+            if (option.startsWith("Short")) {
+                position[option].breakeven = -position[option].breakeven;
+            }
             // If this is a closed option, we won't have a price for it
             position[option].marketPrice = (optionPrices && option in optionPrices) ? ((option.startsWith("Long") ? optionPrices[option].latestBid : optionPrices[option].latestAsk)) : NaN;
             position[option].totalValue = isNaN(position[option].marketPrice) ? 0 : (position[option].marketPrice * position[option].qty * 100);
@@ -1611,20 +1614,15 @@ function computeAndUpdatePositions(latestOptionPrices) {
             for (var i in tickerLots[option]) {
                 position[option].unrealizedPL += (position[option].marketPrice - tickerLots[option][i]) * 100;
             }
+            if (option.startsWith("Short")) {
+                position[option].unrealizedPL = -position[option].unrealizedPL;
+            }
             position[option].totalPL = position[option].realizedPL + position[option].unrealizedPL;
             position[option].totalPLPercent = position[option].totalPL / bought[option] * 100;
             // If this is a closed option, we won't have greeks for it
             position[option].delta = (optionPrices && option in optionPrices) ? (optionPrices[option].delta * 100 * position[option].qty) : NaN;
             position[option].theta = (optionPrices && option in optionPrices) ? (optionPrices[option].theta * 100 * position[option].qty) : NaN;
-
             if (option.startsWith("Short")) {
-                // Breakeven, total value, all P/Ls, P/L %, delta, and theta are opposite of what they should be
-                position[option].breakeven = -position[option].breakeven;
-                position[option].totalValue = -position[option].totalValue;
-                position[option].unrealizedPL = -position[option].unrealizedPL;
-                position[option].realizedPL = -position[option].realizedPL;
-                position[option].totalPL = -position[option].totalPL;
-                position[option].totalPLPercent = -position[option].totalPLPercent;
                 position[option].delta = -position[option].delta;
                 position[option].theta = -position[option].theta;
             }
