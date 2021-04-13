@@ -220,6 +220,9 @@ function getGraphData(tickerDateRanges) {
         'totalPLPercent': []
     };
 
+    var optionLots = {}; // per option for all tickers
+    var plFromOptions = {}; // per ticker
+
     for (var i in tickers) {
         data[tickers[i]] = {
             'dates': [undefined],
@@ -278,12 +281,54 @@ function getGraphData(tickerDateRanges) {
             tradesOnDay.push(trades[tradeIndex]);
             tradeIndex++;
         }
+        // If any trades expired any day up to today (exclusive), add them as trades
+        for (var option in optionLots) {
+            // option is, e.g., "Long GME 4/16/21 300C"
+            var expDateStr = option.split(' ')[2];
+            var expiration = new Date(expDateStr + ' 13:00:00');
+            if (expiration.getTime() < date.getTime()) {
+                var buyToClose = option.startsWith('Short');
+                var ticker = option.split(' ')[1];
+                var strike = option.split(' ')[3];
+                var isCall = strike.endsWith('C');
+                strike = strike.substr(0, strike.length - 1);
+                tradesOnDay.push({
+                    isShares: false,
+                    date: (date.getMonth()+1).toString() + '/' + date.getDate().toString() + '/' + date.getFullYear().toString(),
+                    buying: buyToClose,
+                    toOpen: false,
+                    ticker: ticker,
+                    expiration: expDateStr,
+                    strike: strike,
+                    isCall: isCall,
+                    qty: optionLots[option].length,
+                    price: 0
+                });
+            }
+        }
 
         for (var i in tradesOnDay) {
             var trade = tradesOnDay[i];
-            data[trade.ticker].bought += trade.buying ? trade.qty * trade.price : 0;
-            data[trade.ticker].sold += !trade.buying ? trade.qty * trade.price : 0;
-            data[trade.ticker].numShares = trade.buying ? (data[trade.ticker].numShares + trade.qty) : (data[trade.ticker].numShares - trade.qty);
+            var bought = trade.buying ? (trade.qty * trade.price * (trade.isShares ? 1 : 100)) : 0;
+            var sold = !trade.buying ? (trade.qty * trade.price * (trade.isShares ? 1 : 100)) : 0;
+            data[trade.ticker].bought += bought;
+            data[trade.ticker].sold += sold;
+            if (trade.isShares && trade.buying) {
+                data[trade.ticker].numShares += trade.qty;
+            } else if (trade.isShares && !trade.buying) {
+                data[trade.ticker].numShares -= trade.qty;
+            }
+            if (!trade.isShares) {
+                var option = (trade.buying === trade.toOpen ? 'Long ' : 'Short ') + getOptionStr(trade);
+                if (!(option in optionLots)) {
+                    optionLots[option] = [];
+                }
+                if (trade.toOpen) {
+                    optionLots[option] = optionLots[option].concat(new Array(trade.qty).fill(trade.price));
+                } else {
+                    optionLots[option].splice(0, trade.qty);
+                }
+            }
         }
 
         var allStat = {
@@ -313,13 +358,27 @@ function getGraphData(tickerDateRanges) {
             } else {
                 anyStockHasPrice = true;
 
+                var optionHoldings = 0;
+                for (var option in optionLots) {
+                    if (ticker === option.split(' ')[1]) {
+                        var cost = 0;
+                        for (var k in optionLots[option]) {
+                            cost += 100 * optionLots[option][k];
+                        }
+                        if (option.startsWith('Long')) {
+                            optionHoldings += cost;
+                        } else {
+                            optionHoldings -= cost;
+                        }
+                    }
+                }
                 var sharePrice = data[ticker].sharePrice[data[ticker].sharePrice.length-1];
                 var holdings = {
                     t: sharePrice.t,
-                    o: sharePrice.o * data[ticker].numShares,
-                    h: sharePrice.h * data[ticker].numShares,
-                    l: sharePrice.l * data[ticker].numShares,
-                    c: sharePrice.c * data[ticker].numShares
+                    o: optionHoldings + sharePrice.o * data[ticker].numShares,
+                    h: optionHoldings + sharePrice.h * data[ticker].numShares,
+                    l: optionHoldings + sharePrice.l * data[ticker].numShares,
+                    c: optionHoldings + sharePrice.c * data[ticker].numShares
                 };
                 data[ticker].holdings.push(holdings);
                 data[ticker].breakevenPerShare.push({ x: date.getTime(), y: data[ticker].numShares > 0 ? ((data[ticker].bought - data[ticker].sold) / data[ticker].numShares) : 0 });
@@ -370,10 +429,6 @@ function getGraphData(tickerDateRanges) {
         date = new Date(date.getTime() + 30*60*60*1000); // add 30 hours, so we're always part-way through the next day
         date = new Date(date.getFullYear(), date.getMonth(), date.getDate()); // Get start of day
     }
-
-    // for (var i in tickers) {
-    //     data[tickers[i]].sharePrice = stockPrices[tickers[i]].prices;
-    // }
 
     data.all = allData;
     // Remove data for stocks entered and left all in one day
@@ -557,7 +612,7 @@ function chartElementSelectionClicked(graph) {
         if (chartType === 'line') {
             for (var i in datasets) {
                 var dataset = datasets[i];
-                if (dataset[0].o) {
+                if ('o' in dataset[0]) {
                     // it's OHLC data, so we need to convert
                     var newDataset = [];
                     for (var j in dataset) {
@@ -613,7 +668,7 @@ function chartElementSelectionClicked(graph) {
         if (chartType === 'line') {
             for (var i in datasets) {
                 var dataset = datasets[i];
-                if (dataset[0].o) {
+                if ('o' in dataset[0]) {
                     // it's OHLC data, so we need to convert
                     var newDataset = [];
                     for (var j in dataset) {
