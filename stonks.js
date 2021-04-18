@@ -6,6 +6,17 @@ $.fn.insertIndex = function(html, i) {
     }
     return this;
 };
+function getCommaSepNumber(numStr) {
+    var separatorIndex = numStr.indexOf('.');
+    if (separatorIndex < 0) {
+        separatorIndex = numStr.length;
+    }
+    while (separatorIndex > 3) {
+        numStr = numStr.substr(0, separatorIndex-3) + ',' + numStr.substr(separatorIndex-3);
+        separatorIndex -= 3;
+    }
+    return numStr;
+}
 function getPriceText(price) {
     if (price === undefined) {
         return '-';
@@ -13,9 +24,9 @@ function getPriceText(price) {
     
     var text = '';
     if (price < 0) {
-        text = '-$' + (-price).toFixed(4);
+        text = '-$' + getCommaSepNumber((-price).toFixed(4));
     } else {
-        text = '$' + price.toFixed(4);
+        text = '$' + getCommaSepNumber(price.toFixed(4));
     }
     if (text.endsWith('00')) {
         text = text.substr(0, text.length - 2);
@@ -32,7 +43,7 @@ function getPercentText(percent) {
     } else if (percent === -Infinity) {
         return "-∞%";
     } else {
-        return percent.toFixed(2) + ' %';
+        return getCommaSepNumber(percent.toFixed(2)) + ' %';
     }
 }
 function getTodayDate() {
@@ -807,7 +818,7 @@ function addTrade(trade, addingBulk) {
         '    <td>' + trade.date + '</td>' +
         '    <td>' + (trade.isShares ? (trade.buying ? 'Buy' : 'Sell') : ((trade.buying ? 'B' : 'S') + 'T' + (trade.toOpen ? 'O' : 'C'))) + '</td>' +
         '    <td>' + (trade.isShares ? trade.ticker : (trade.ticker + ' ' + trade.expiration + '<br/>' + trade.strike.toString() + (trade.isCall ? 'C' : 'P'))) + '</td>' +
-        '    <td>' + trade.qty.toString() + '</td>' +
+        '    <td>' + getCommaSepNumber(trade.qty.toString()) + '</td>' +
         '    <td>' + getPriceText(trade.price) + '</td>' +
         '    <td><button type="button" class="btn-close" onclick="removeTradeBtnClicked(this)"></button></td>' +
         '</tr>';
@@ -839,7 +850,7 @@ function updateTrade(index, newTrade) {
             '    <td>' + newTrade.date + '</td>' +
             '    <td>' + (newTrade.isShares ? (newTrade.buying ? 'Buy' : 'Sell') : ((newTrade.buying ? 'B' : 'S') + 'T' + (newTrade.toOpen ? 'O' : 'C'))) + '</td>' +
             '    <td>' + (newTrade.isShares ? newTrade.ticker : (newTrade.ticker + ' ' + newTrade.expiration + '<br/>' + newTrade.strike.toString() + (newTrade.isCall ? 'C' : 'P'))) + '</td>' +
-            '    <td>' + newTrade.qty.toString() + '</td>' +
+            '    <td>' + getCommaSepNumber(newTrade.qty.toString()) + '</td>' +
             '    <td>' + getPriceText(newTrade.price) + '</td>' +
             '    <td><button type="button" class="btn-close" onclick="removeTradeBtnClicked(this)"></button></td>' +
             '</tr>';
@@ -1253,7 +1264,7 @@ function updateStats() {
             '    <th scope="row">' + trade.date + '</th>' +
             '    <th scope="row">' + (trade.isExpired ? 'EXP' : (trade.isShares ? (trade.buying ? 'Buy' : 'Sell') : ((trade.buying ? 'B' : 'S') + 'T' + (trade.toOpen ? 'O' : 'C')))) + '</th>' +
             '    <th scope="row">' + trade.symbol + '</th>' +
-            '    <td>' + trade.qty.toString() + '</td>' +
+            '    <td>' + getCommaSepNumber(trade.qty.toString()) + '</td>' +
             '    <td>' + getPriceText(trade.isExpired ? undefined : trade.price) + '</td>' +
             '    <td>' + getPriceText(trade.totalBought) + '</td>' +
             '    <td>' + getPriceText(trade.totalSold) + '</td>' +
@@ -1273,11 +1284,11 @@ function updateStats() {
                 '    <th scope="row">' + trade.date + '</th>' +
                 '    <th scope="row">' + (trade.isExpired ? 'EXP' : (trade.isShares ? (trade.buying ? 'Buy' : 'Sell') : ((trade.buying ? 'B' : 'S') + 'T' + (trade.toOpen ? 'O' : 'C')))) + '</th>' +
                 '    <th scope="row">' + trade.symbol + '</th>' +
-                '    <td>' + trade.qty.toString() + '</td>' +
+                '    <td>' + getCommaSepNumber(trade.qty.toString()) + '</td>' +
                 '    <td>' + getPriceText(trade.isExpired ? undefined : trade.price) + '</td>' +
                 '    <td>' + getPriceText(trade.stockBought) + '</td>' +
                 '    <td>' + getPriceText(trade.stockSold) + '</td>' +
-                '    <td>' + trade.lots.shares.length.toString() + '</td>' +
+                '    <td>' + getCommaSepNumber(trade.lots.shares.length.toString()) + '</td>' +
                 '    <td>' + getPriceText(trade.breakevenPerShare) + '</td>' +
                 '    <td>' + getPriceText(trade.pl) + '</td>' +
                 '    <td>' + getPercentText(trade.plPercent) + '</td>' +
@@ -1866,7 +1877,7 @@ function updatePositionsTable(summaries, openPositions, closedPositions) {
             var sharesRow = 
                 '<tr>' +
                 '    <th scope="row"><i class="bi bi-caret-right-fill"></i>  ' + ticker + '</th>' +
-                '    <td>' + position.shares.qty.toString() + '</td>' +
+                '    <td>' + getCommaSepNumber(position.shares.qty.toString()) + '</td>' +
                 '    <td>' + getPriceText(position.shares.breakeven) + '</td>' +
                 '    <td>' + getPriceText(position.shares.marketPrice) + '</td>' +
                 '    <td>' + getPriceText(position.shares.totalValue) + '</td>' +
@@ -1891,7 +1902,7 @@ function updatePositionsTable(summaries, openPositions, closedPositions) {
             var optionRow = 
                 '<tr>' +
                 '    <th scope="row"><i class="bi bi-caret-right-fill"></i>  ' + symbol + '</th>' +
-                '    <td>' + position[option].qty.toString() + '</td>' +
+                '    <td>' + getCommaSepNumber(position[option].qty.toString()) + '</td>' +
                 '    <td>' + getPriceText(position[option].breakeven) + '</td>' +
                 '    <td>' + getPriceText(position[option].marketPrice) + '</td>' +
                 '    <td>' + getPriceText(position[option].totalValue) + '</td>' +

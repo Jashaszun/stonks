@@ -203,6 +203,17 @@ Chart.defaults.financial = {
 					}
 
 					const {o, h, l, c} = point;
+					function getCommaSepNumber(numStr) {
+						var separatorIndex = numStr.indexOf('.');
+						if (separatorIndex < 0) {
+							separatorIndex = numStr.length;
+						}
+						while (separatorIndex > 3) {
+							numStr = numStr.substr(0, separatorIndex-3) + ',' + numStr.substr(separatorIndex-3);
+							separatorIndex -= 3;
+						}
+						return numStr;
+					}
 					function getPriceText(price) {
 						if (price === undefined) {
 							return '-';
@@ -210,9 +221,9 @@ Chart.defaults.financial = {
 						
 						var text = '';
 						if (price < 0) {
-							text = '-$' + (-price).toFixed(4);
+							text = '-$' + getCommaSepNumber((-price).toFixed(4));
 						} else {
-							text = '$' + price.toFixed(4);
+							text = '$' + getCommaSepNumber(price.toFixed(4));
 						}
 						if (text.endsWith('00')) {
 							text = text.substr(0, text.length - 2);
