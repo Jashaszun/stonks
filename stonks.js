@@ -1817,6 +1817,13 @@ function computeAndUpdatePositions(latestOptionPrices) {
         summaries.all.unrealizedPL += total.unrealizedPL;
         summaries.all.totalPL += total.totalPL;
         summaries.all.theta += total.theta;
+
+        if ('totalFromClosed' in positions[ticker]) {
+            total = positions[ticker].totalFromClosed;
+            summaries.all.realizedPL += total.realizedPL;
+            summaries.all.totalPL += total.realizedPL;
+        }
+
         totalBought += tickerBought[ticker].total;
     }
     summaries.all.totalPLPercent = summaries.all.totalPL / totalBought * 100;
