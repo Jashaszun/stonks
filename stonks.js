@@ -7,6 +7,10 @@ $.fn.insertIndex = function(html, i) {
     return this;
 };
 function getCommaSepNumber(numStr) {
+    var hasMinus = numStr.charAt(0) === '-';
+    if (hasMinus) {
+        numStr = numStr.substr(1);
+    }
     var separatorIndex = numStr.indexOf('.');
     if (separatorIndex < 0) {
         separatorIndex = numStr.length;
@@ -14,6 +18,9 @@ function getCommaSepNumber(numStr) {
     while (separatorIndex > 3) {
         numStr = numStr.substr(0, separatorIndex-3) + ',' + numStr.substr(separatorIndex-3);
         separatorIndex -= 3;
+    }
+    if (hasMinus) {
+        numStr = '-' + numStr;
     }
     return numStr;
 }
@@ -39,9 +46,9 @@ function getPercentText(percent) {
     if (percent === undefined) {
         return '-';
     } else if (percent === Infinity) {
-        return "∞%";
+        return "∞ %";
     } else if (percent === -Infinity) {
-        return "-∞%";
+        return "-∞ %";
     } else {
         return getCommaSepNumber(percent.toFixed(2)) + ' %';
     }

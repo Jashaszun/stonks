@@ -204,6 +204,10 @@ Chart.defaults.financial = {
 
 					const {o, h, l, c} = point;
 					function getCommaSepNumber(numStr) {
+						var hasMinus = numStr.charAt(0) === '-';
+						if (hasMinus) {
+							numStr = numStr.substr(1);
+						}
 						var separatorIndex = numStr.indexOf('.');
 						if (separatorIndex < 0) {
 							separatorIndex = numStr.length;
@@ -211,6 +215,9 @@ Chart.defaults.financial = {
 						while (separatorIndex > 3) {
 							numStr = numStr.substr(0, separatorIndex-3) + ',' + numStr.substr(separatorIndex-3);
 							separatorIndex -= 3;
+						}
+						if (hasMinus) {
+							numStr = '-' + numStr;
 						}
 						return numStr;
 					}
