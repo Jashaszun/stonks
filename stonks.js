@@ -1703,7 +1703,11 @@ function computeAndUpdatePositions(latestOptionPrices) {
             }
 
             if (position[option].qty > 0) {
-                position.total.totalValue += position[option].totalValue;
+                if (option.startsWith("Short")) {
+                    position.total.totalValue -= position[option].totalValue;
+                } else {
+                    position.total.totalValue += position[option].totalValue;
+                }
                 position.total.realizedPL += position[option].realizedPL;
                 position.total.unrealizedPL += position[option].unrealizedPL;
                 position.total.totalPL += position[option].totalPL;
